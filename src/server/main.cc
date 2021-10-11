@@ -35,7 +35,7 @@ int main()
 
         if (first_pair != query_split.end() && strcmp(first_pair->first.c_str(), "/d") == 0)
         {
-            dnsHandler(server_task, client, first_pair->second);
+            dnsReqHandler(server_task, client, first_pair->second);
             return;
         }
         else

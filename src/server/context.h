@@ -1,6 +1,9 @@
 #include <vector>
 #include <string>
+#include <workflow/WFTaskFactory.h>
+#include "json.hpp"
 
+using json = nlohmann::json;
 /*
 resp : 
 {
@@ -15,13 +18,10 @@ resp :
 }
 */
 
-// todo : origin_ttl 
+// todo : 1. how to get origin_ttl 
 
 struct series_context
 {
-    std::string host;
-    std::vector<std::string> ips;
-    int ttl;
-    int origin_ttl;
-    std::string client_ip;
+    json js;
+    WFHttpTask *server_task;
 };
