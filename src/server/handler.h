@@ -3,27 +3,36 @@
 #include <workflow/HttpMessage.h>
 #include <spdlog/spdlog.h>
 #include <workflow/WFDnsClient.h>
+#include <workflow/DnsUtil.h>
+// #include "util.h"
 
 using namespace protocol;
 
-void create_dns_task(WFHttpTask *server_task, WFDnsClient *dnsClient, std::string &url)
+WFDnsTask* create_dns_task(WFDnsClient *dnsClient, const std::string &url)
 {
 	spdlog::info("create dns task");
-	HttpRequest *http_req = server_task->get_req();
 
-	spdlog::info("{}", http_req->get_request_uri());
 	WFDnsTask *dns_task = dnsClient->create_dns_task(url,
-		[&server_task](WFDnsTask *dns_task)
-		{
-			int state = dns_task->get_state();
-
-			if (state == WFT_STATE_SUCCESS)
+		[](WFDnsTask *dns_task)
+		{	
+			spdlog::info("1");
+			if (dns_task->get_state() == WFT_STATE_SUCCESS)
 			{
+				spdlog::info("2");
 				auto dns_resp = dns_task->get_resp();
-				dns_resp->get_question_type();
-				spdlog::info("type : {}", dns_resp->get_question_name());
+				DnsResultCursor cursor(dns_resp);
+				dns_record* record = nullptr;
+				while(cursor.next(&record)) {
+					spdlog::info("{}", record->rdlength);
+					// if(record->type == DNS_TYPE_A) {
+					// 	spdlog::info("{}", ipBinToString(record->rdata));
+					// }
+
+					// spdlog::info("{}", static_cast<char*>(record->rdata));
+				}
 			}
 		});
 
-	**server_task << dns_task;
+
 }
+

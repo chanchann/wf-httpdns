@@ -29,18 +29,14 @@ int main()
     WFHttpServer server([&client](WFHttpTask *server_task) {
         const char *request_uri = server_task->get_req()->get_request_uri();
         auto query_split = URIParser::split_query(request_uri);
-        // for(auto it = query_split.begin(); it != query_split.end(); it++) {
-        //     spdlog::info("{} : {}", it->first, it->second);
-        // }
-        if(query_split.empty()) {
-            spdlog::info("Query is empty!");
-            return;
-        }
+
         auto first_pair = query_split.begin();
-        // spdlog::info("{}", first_pair->first);
-        if (strcmp(first_pair->first.c_str(), "/d") == 0)
+        
+        if (first_pair != query_split.end() &&  strcmp(first_pair->first.c_str(), "/d") == 0)
         {
-            create_dns_task(server_task, &client, first_pair->second);
+            auto dns_task = create_dns_task(&client, first_pair->second);
+            **server_task << dns_task;
+
             server_task->set_callback([](WFHttpTask *server_task) {
                 spdlog::info("dns query finished, state = {}", server_task->get_state());
             });
