@@ -9,6 +9,7 @@
 #include <memory>
 #include <signal.h>
 #include <unordered_map>
+#include "factory.h"
 #include "handler.h"
 
 using namespace protocol;
@@ -26,20 +27,15 @@ int main()
     WFDnsClient client;
     client.init("dns://8.8.8.8/");
 
-    WFHttpServer server([&client](WFHttpTask *server_task) {
+    WFHttpServer server([&client](WFHttpTask *server_task)
+    {
         const char *request_uri = server_task->get_req()->get_request_uri();
         auto query_split = URIParser::split_query(request_uri);
-
         auto first_pair = query_split.begin();
-        
-        if (first_pair != query_split.end() &&  strcmp(first_pair->first.c_str(), "/d") == 0)
-        {
-            auto dns_task = create_dns_task(&client, first_pair->second);
-            **server_task << dns_task;
 
-            server_task->set_callback([](WFHttpTask *server_task) {
-                spdlog::info("dns query finished, state = {}", server_task->get_state());
-            });
+        if (first_pair != query_split.end() && strcmp(first_pair->first.c_str(), "/d") == 0)
+        {
+            dnsHandler(server_task, client, first_pair->second);
             return;
         }
         else
@@ -49,7 +45,8 @@ int main()
         }
     });
 
-    if (server.start(8888) == 0) {
+    if (server.start(8888) == 0)
+    {
         wait_group.wait();
         client.deinit();
         server.stop();

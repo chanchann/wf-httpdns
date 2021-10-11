@@ -28,6 +28,8 @@ string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
 
 find_package(spdlog)
 
+include_directories(${CMAKE_SOURCE_DIR}/3rd)
+
 set(CMAKE_CXX_FLAGS_DEBUG "-O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 
