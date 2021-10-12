@@ -50,7 +50,7 @@ When the request is successful, the HTTP response status code is 200, and the re
 
 Request method: HTTP GET or HTTPS GET
 
-Service URL: http://127.0.0.1:9001/{account_id}/resolve
+Service URL: http://127.0.0.1:9001/resolve
 
 URL parameter description:
 

@@ -1,5 +1,5 @@
-#ifndef CONTEXT_H
-#define CONTEXT_H
+#ifndef _CONTEXT_H_
+#define _CONTEXT_H_
 
 #include <vector>
 #include <string>
@@ -24,7 +24,7 @@ struct dns_context
     std::string client_ip;
 };
 
-void to_json(json& js, const dns_context& dns_ctx) {
+static inline void to_json(json& js, const dns_context& dns_ctx) {
     js = json {
         {"host", dns_ctx.host}, 
         {"ips", dns_ctx.ips}, 
@@ -43,4 +43,4 @@ struct parallel_context
 };
 
 
-#endif // CONTEXT_H
+#endif // _CONTEXT_H_

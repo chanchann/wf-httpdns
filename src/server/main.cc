@@ -8,8 +8,7 @@
 #include <memory>
 #include <signal.h>
 #include <unordered_map>
-
-#include "handler.h"
+#include "HDService.h"
 
 using namespace protocol;
 
@@ -40,12 +39,12 @@ int main()
 
         if (strcmp(path.c_str(), "/d") == 0)
         {
-            singleDnsReq(server_task, client, query_split);
+            HDService::single_dns_resolve(server_task, client, query_split);
             return;
         }
         else if(strcmp(path.c_str(), "/resolve") == 0)
         {
-            multiDnsReq(server_task, client, query_split);
+            HDService::multi_dns_resolve(server_task, client, query_split);
             return;
         }
         else
