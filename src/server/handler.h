@@ -14,8 +14,10 @@
 using namespace protocol;
 
 void singleDnsReq(WFHttpTask *server_task, WFDnsClient& client, 
-					std::map<std::string, std::vector<std::string>>& query_split) {
-	auto host_list = query_split["host"];
+					std::map<std::string, std::string>& query_split) {
+	spdlog::trace("single dns request");
+
+	auto host_list = StringUtil::split(query_split["host"], ',');
 	HttpResponse* server_resp =  server_task->get_resp();
 	if(host_list.empty())
 	{
@@ -48,7 +50,9 @@ void singleDnsReq(WFHttpTask *server_task, WFDnsClient& client,
 }
 
 void multiDnsReq(WFHttpTask *server_task, WFDnsClient& dnsClient, 
-					std::map<std::string, std::vector<std::string>>& query_split) {
+					std::map<std::string, std::string>& query_split) {
+	spdlog::trace("multiple dns request");
+
 	ParallelWork *pwork = create_dns_paralell(dnsClient, query_split);
 	if(!pwork) return;
 
@@ -59,10 +63,11 @@ void multiDnsReq(WFHttpTask *server_task, WFDnsClient& dnsClient,
 	
 	series->set_context(para_ctx);
 	series->push_back(pwork);
-	server_task->set_callback([&para_ctx](WFHttpTask *)
+
+	server_task->set_callback([](WFHttpTask *server_task)
 	{
 		spdlog::info("delete parallel context");
-		delete para_ctx;
+		delete static_cast<parallel_context *>(series_of(server_task)->get_context());
 	});
 }
 

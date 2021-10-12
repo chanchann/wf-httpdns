@@ -36,7 +36,7 @@ int main()
         std::string path(request_uri, cur - request_uri);
         std::string query(cur+1); 
 
-        auto query_split = URIParser::split_query_strict(query);
+        auto query_split = URIParser::split_query(query);
 
         if (strcmp(path.c_str(), "/d") == 0)
         {
@@ -55,7 +55,7 @@ int main()
         }
     });
 
-    if (server.start(8888) == 0)
+    if (server.start(9001) == 0)
     {
         wait_group.wait();
         server.stop();

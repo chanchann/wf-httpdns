@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 #include <workflow/WFDnsClient.h>
 #include <workflow/DnsUtil.h>
+#include <workflow/StringUtil.h>
 #include <mutex>
 #include <vector>
 #include "util.h"
@@ -36,6 +37,7 @@ void dns_callback_multi(WFDnsTask *dns_task)
 		}
 		auto pwork = dns_task->get_parent_task();
 		auto para_ctx = static_cast<parallel_context *>(series_of(pwork)->get_context());
+		dns_ctx->client_ip = getPeerAddrStr(para_ctx->server_task);
 		{
 			std::lock_guard<std::mutex> lock(para_ctx->mutex);
 			para_ctx->dns_context_list.push_back(dns_ctx);
@@ -124,9 +126,9 @@ void parallel_callback(const ParallelWork *pwork)
 }
 
 ParallelWork *create_dns_paralell(WFDnsClient &dnsClient,
-								  std::map<std::string, std::vector<std::string>> &query_split)
+								  std::map<std::string, std::string> &query_split)
 {
-	auto host_list = query_split["host"];
+	auto host_list = StringUtil::split(query_split["host"], ',');
 	if (host_list.empty())
 	{
 		spdlog::error("host is required field");
