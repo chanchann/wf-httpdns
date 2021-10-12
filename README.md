@@ -10,7 +10,7 @@ HTTPDNS provides external domain name resolution services through the HTTP inter
 
 Request method: HTTP GET or HTTPS GET
 
-HTTP service URL: http://127.0.0.1//d
+HTTP service URL: http://127.0.0.1/d
 
 HTTPS service URL: https://127.0.0.1/d
 

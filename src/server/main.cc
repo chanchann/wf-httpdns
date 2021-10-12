@@ -1,4 +1,3 @@
-#include <iostream>
 #include <workflow/Workflow.h>
 #include <workflow/WFTaskFactory.h>
 #include <workflow/WFFacilities.h>
@@ -9,7 +8,7 @@
 #include <memory>
 #include <signal.h>
 #include <unordered_map>
-#include "factory.h"
+
 #include "handler.h"
 
 using namespace protocol;
@@ -30,17 +29,28 @@ int main()
     WFHttpServer server([&client](WFHttpTask *server_task)
     {
         const char *request_uri = server_task->get_req()->get_request_uri();
-        auto query_split = URIParser::split_query(request_uri);
-        auto first_pair = query_split.begin();
+        const char *cur = request_uri;
+        while (*cur && *cur != '?')
+            cur++;
 
-        if (first_pair != query_split.end() && strcmp(first_pair->first.c_str(), "/d") == 0)
+        std::string path(request_uri, cur - request_uri);
+        std::string query(cur+1); 
+
+        auto query_split = URIParser::split_query_strict(query);
+
+        if (strcmp(path.c_str(), "/d") == 0)
         {
-            dnsReqHandler(server_task, client, first_pair->second);
+            singleDnsReq(server_task, client, query_split);
+            return;
+        }
+        else if(strcmp(path.c_str(), "/resolve") == 0)
+        {
+            multiDnsReq(server_task, client, query_split);
             return;
         }
         else
         {
-            server_task->get_resp()->append_output_body("Invalid query");
+            server_task->get_resp()->append_output_body_nocopy(R"({"code": "Invalid Query"})", 25);
             return;
         }
     });
@@ -48,8 +58,8 @@ int main()
     if (server.start(8888) == 0)
     {
         wait_group.wait();
-        client.deinit();
         server.stop();
+        client.deinit();
     }
 
     return 0;

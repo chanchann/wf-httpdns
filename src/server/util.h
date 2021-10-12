@@ -1,3 +1,6 @@
+#ifndef UTIL_H
+#define UTIL_H
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>   
@@ -39,3 +42,4 @@ std::string getPeerAddrStr(WFHttpTask *server_task) {
 	spdlog::trace("Get peer addr : {}", addrstr);
    	return addrstr;
 }
+#endif // UTIL_H
