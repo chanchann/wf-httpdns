@@ -54,7 +54,10 @@ void multiDnsReq(WFHttpTask *server_task, WFDnsClient& dnsClient,
 	spdlog::trace("multiple dns request");
 
 	ParallelWork *pwork = create_dns_paralell(dnsClient, query_split);
-	if(!pwork) return;
+	if(!pwork) {
+		server_task->get_resp()->append_output_body_nocopy(R"({"code": "host field is required"})", 34);
+		return;
+	}
 
 	SeriesWork *series = series_of(server_task);
 

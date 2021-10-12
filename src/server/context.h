@@ -8,51 +8,12 @@
 #include "json.hpp"
 
 using json = nlohmann::json;
-/*
-single resp : 
-{
-    "host": "www.baidu.com",
-    "ips": [
-        "220.181.38.149",
-        "220.181.38.150"
-    ],
-    "ttl": 42,
-    "origin_ttl": 300,    
-    "client_ip": "36.110.147.196"
-}
-*/
 
 struct single_dns_context
 {
     json js;
     WFHttpTask *server_task;
 };
-
-/*
-multi resp : 
-{
-    "dns": [
-        {
-            "host": "www.sogou.com",
-            "client_ip": "36.110.147.196",
-            "ips": [],
-            "type": 1,
-            "ttl": 300
-        },
-        {
-            "host": "www.baidu.com",
-            "client_ip": "36.110.147.196",
-            "ips": [
-                "220.181.38.150",
-                "220.181.38.149"
-            ],
-            "type": 1,
-            "ttl": 171,
-            "origin_ttl": 300
-        }
-    ]
-}
-*/
 
 struct dns_context
 {

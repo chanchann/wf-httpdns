@@ -138,8 +138,8 @@ ParallelWork *create_dns_paralell(WFDnsClient &dnsClient,
 	ParallelWork *pwork = Workflow::create_parallel_work(parallel_callback);
 	for (auto &host : host_list)
 	{
-		auto series = create_dns_series(dnsClient, host);
-		pwork->add_series(series);
+		auto dns_series = create_dns_series(dnsClient, host);
+		pwork->add_series(dns_series);
 	}
 	return pwork;
 }
