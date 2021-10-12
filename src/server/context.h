@@ -20,18 +20,18 @@ struct dns_context
     std::string host;
     std::vector<std::string> ips;
     int ttl;
-    int origin_ttl;  // todo : 1. how to get origin_ttl
+    int origin_ttl; // todo : 1. how to get origin_ttl
     std::string client_ip;
 };
 
-static inline void to_json(json& js, const dns_context& dns_ctx) {
-    js = json {
-        {"host", dns_ctx.host}, 
-        {"ips", dns_ctx.ips}, 
+static inline void to_json(json &js, const dns_context &dns_ctx)
+{
+    js = json{
+        {"host", dns_ctx.host},
+        {"ips", dns_ctx.ips},
         {"ttl", dns_ctx.ttl},
         {"origin_ttl", dns_ctx.origin_ttl},
-        {"client_ip", dns_ctx.client_ip}
-    };
+        {"client_ip", dns_ctx.client_ip}};
 }
 
 struct parallel_context
@@ -41,6 +41,5 @@ struct parallel_context
     std::vector<dns_context *> dns_context_list;
     std::mutex mutex;
 };
-
 
 #endif // _CONTEXT_H_

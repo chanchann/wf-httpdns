@@ -33,7 +33,7 @@ int main()
             cur++;
 
         std::string path(request_uri, cur - request_uri);
-        std::string query(cur+1); 
+        std::string query(cur + 1);
 
         auto query_split = URIParser::split_query(query);
 
@@ -42,7 +42,7 @@ int main()
             HDService::single_dns_resolve(server_task, client, query_split);
             return;
         }
-        else if(strcmp(path.c_str(), "/resolve") == 0)
+        else if (strcmp(path.c_str(), "/resolve") == 0)
         {
             HDService::multi_dns_resolve(server_task, client, query_split);
             return;

@@ -24,8 +24,9 @@ public:
 	static ParallelWork *
 	create_dns_paralell(WFDnsClient &dnsClient,
 						std::map<std::string, std::string> &query_split);
+
 private:
-	static SeriesWork * 
+	static SeriesWork *
 	create_dns_series(WFDnsClient &dnsClient, const std::string &host);
 };
 

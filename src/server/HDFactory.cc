@@ -8,11 +8,11 @@ static inline void __parallel_callback(const ParallelWork *pwork)
 	auto dns_cxt_list = para_ctx->dns_context_list;
 
 	json dns_js;
-	for(auto dns_ctx : dns_cxt_list)
+	for (auto dns_ctx : dns_cxt_list)
 	{
 		to_json(dns_js, *dns_ctx);
 		para_ctx->js["dns"].push_back(dns_js);
-		delete dns_ctx;   
+		delete dns_ctx;
 	}
 
 	para_ctx->server_task->get_resp()->append_output_body(para_ctx->js.dump());
@@ -20,7 +20,8 @@ static inline void __parallel_callback(const ParallelWork *pwork)
 	spdlog::info("All series in this parallel have done");
 }
 
-SeriesWork* HDFactory::create_dns_series(WFDnsClient &dnsClient, const std::string &host) {
+SeriesWork *HDFactory::create_dns_series(WFDnsClient &dnsClient, const std::string &host)
+{
 	spdlog::trace("create dns series");
 	WFDnsTask *dns_task = create_dns_task(dnsClient, host, true);
 	SeriesWork *series = Workflow::create_series_work(dns_task, nullptr);
@@ -32,8 +33,8 @@ SeriesWork* HDFactory::create_dns_series(WFDnsClient &dnsClient, const std::stri
 	return series;
 }
 
-ParallelWork* HDFactory::create_dns_paralell(WFDnsClient &dnsClient,
-								  std::map<std::string, std::string> &query_split)
+ParallelWork *HDFactory::create_dns_paralell(WFDnsClient &dnsClient,
+											 std::map<std::string, std::string> &query_split)
 {
 	auto host_list = StringUtil::split(query_split["host"], ',');
 	if (host_list.empty())
@@ -51,7 +52,6 @@ ParallelWork* HDFactory::create_dns_paralell(WFDnsClient &dnsClient,
 	return pwork;
 }
 
-
 static inline void __dns_callback(WFDnsTask *dns_task)
 {
 	if (dns_task->get_state() == WFT_STATE_SUCCESS)
@@ -67,7 +67,7 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 		while (cursor.next(&record))
 		{
 			if (record->type == DNS_TYPE_A)
-			{	
+			{
 				ips.emplace_back(Util::ip_bin_to_str(record->rdata));
 				sin_ctx->js["ttl"] = record->ttl;
 			}
@@ -81,7 +81,6 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 		spdlog::error("request DNS failed...");
 	}
 }
-
 
 static inline void __dns_callback_multi(WFDnsTask *dns_task)
 {
@@ -117,19 +116,17 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 	}
 }
 
-
-WFDnsTask* HDFactory::create_dns_task(WFDnsClient &dnsClient, const std::string &url, bool mutli)
+WFDnsTask *HDFactory::create_dns_task(WFDnsClient &dnsClient, const std::string &url, bool mutli)
 {
 	spdlog::trace("create dns task");
 	WFDnsTask *dns_task;
-	if(mutli)  
+	if (mutli)
 	{
 		dns_task = dnsClient.create_dns_task(url, __dns_callback_multi);
 	}
-	else 
+	else
 	{
 		dns_task = dnsClient.create_dns_task(url, __dns_callback);
 	}
 	return dns_task;
 }
-
