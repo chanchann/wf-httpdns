@@ -23,7 +23,7 @@ std::string __check_host_field(WFHttpTask *server_task, std::map<std::string, st
     return host;
 }
 
-void __check_query_field(bool &ipv4, bool ipv6, std::map<std::string, std::string> &query_split)
+void __check_query_field(bool &ipv4, bool &ipv6, std::map<std::string, std::string> &query_split)
 {
     if(query_split.find("query") != query_split.end())
     {   
@@ -60,6 +60,11 @@ void HDService::single_dns_resolve(WFHttpTask *server_task, WFDnsClient &client,
     auto pwork = Workflow::create_parallel_work([](const ParallelWork *pwork)
     {
         spdlog::info("All series in this parallel have done");
+        auto sin_ctx = 
+            static_cast<single_dns_context *>(series_of(pwork)->get_context());
+        HttpResponse *server_resp = sin_ctx->server_task->get_resp();
+        spdlog::info("res : {}", sin_ctx->js.dump());
+		server_resp->append_output_body(sin_ctx->js.dump());
     });
 
     if(ipv4) 
@@ -77,12 +82,8 @@ void HDService::single_dns_resolve(WFHttpTask *server_task, WFDnsClient &client,
     }
     
     server_task->set_callback([](WFHttpTask *server_task) {
-        auto sin_ctx = static_cast<single_dns_context *>(series_of(server_task)->get_context());
-        HttpResponse *server_resp = server_task->get_resp();
-        spdlog::info("res : {}", sin_ctx->js.dump());
-		server_resp->append_output_body(sin_ctx->js.dump());
+        delete static_cast<single_dns_context *>(series_of(server_task)->get_context());
         spdlog::info("server task done");
-        delete sin_ctx;
     });
     
     single_dns_context *sin_ctx = new single_dns_context;

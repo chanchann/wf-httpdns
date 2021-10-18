@@ -54,14 +54,12 @@ ParallelWork *HDFactory::create_dns_paralell(WFDnsClient &dnsClient,
 
 static inline void __dns_callback(WFDnsTask *dns_task)
 {
-	spdlog::debug("__dns_callback");
 	if (dns_task->get_state() == WFT_STATE_SUCCESS)
 	{
 		spdlog::info("request DNS successfully...");
 
 		auto sin_ctx =
 			static_cast<single_dns_context *>(series_of(dns_task->get_parent_task())->get_context());
-		spdlog::info("sin_ctx : {}", sin_ctx->test);
 		
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);

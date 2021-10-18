@@ -28,7 +28,7 @@ Example request:
 
 Example 1: http://127.0.0.1:9001/d?host=www.baidu.com
 
-Example 2 (Specify the resolution type): http://127.0.0.1:9001/d?host=www.baidu.com&query=4,6
+Example 2 (Specify the resolution type): http://127.0.0.1:9001/d?host=ipv6.tsinghua.edu.cn&query=4,6
 
 - Request succeed
 
@@ -37,12 +37,14 @@ When the request is successful, the HTTP response status code is 200, and the re
 ```
 {
     "client_ip": "172.17.0.1",
-    "host": "www.baidu.com",
+    "host": "ipv6.tsinghua.edu.cn",
     "ips": [
-        "14.215.177.38",
-        "14.215.177.39"
+        "166.111.8.205"
     ],
-    "ttl": 39
+    "ipsv6": [
+        "2402:f000:1:881::8:205"
+    ],
+    "ttl": 7315
 }
 ```
 
