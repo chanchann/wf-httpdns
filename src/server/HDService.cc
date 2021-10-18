@@ -62,12 +62,6 @@ void HDService::single_dns_resolve(WFHttpTask *server_task, WFDnsClient &client,
         spdlog::info("All series in this parallel have done");
     });
 
-    single_dns_context *sin_ctx = new single_dns_context;
-    sin_ctx->server_task = server_task;
-    sin_ctx->js["host"] = std::move(host);
-    sin_ctx->js["client_ip"] = Util::get_peer_addr_str(server_task);
-    series_of(server_task)->set_context(sin_ctx);
-
     if(ipv4) 
     {
         spdlog::trace("add ipv4 series");
@@ -81,7 +75,7 @@ void HDService::single_dns_resolve(WFHttpTask *server_task, WFDnsClient &client,
         dns_task_v6->get_req()->set_question_type(DNS_TYPE_AAAA);
         pwork->add_series(Workflow::create_series_work(dns_task_v6, nullptr));   
     }
-    **server_task << pwork;
+    
     server_task->set_callback([](WFHttpTask *server_task) {
         auto sin_ctx = static_cast<single_dns_context *>(series_of(server_task)->get_context());
         HttpResponse *server_resp = server_task->get_resp();
@@ -90,6 +84,13 @@ void HDService::single_dns_resolve(WFHttpTask *server_task, WFDnsClient &client,
         spdlog::info("server task done");
         delete sin_ctx;
     });
+    
+    single_dns_context *sin_ctx = new single_dns_context;
+    sin_ctx->server_task = server_task;
+    sin_ctx->js["host"] = std::move(host);
+    sin_ctx->js["client_ip"] = Util::get_peer_addr_str(server_task);
+    series_of(server_task)->set_context(sin_ctx);
+    series_of(server_task)->push_back(pwork);
 }
 
 void HDService::multi_dns_resolve(WFHttpTask *server_task, WFDnsClient &dnsClient,

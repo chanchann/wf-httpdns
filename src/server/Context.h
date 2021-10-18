@@ -13,6 +13,7 @@ struct single_dns_context
 {
     json js;
     WFHttpTask *server_task;
+    std::string test = "123";
 };
 
 struct dns_context

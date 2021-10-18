@@ -24,7 +24,7 @@ int main()
     signal(SIGINT, sig_handler);
     spdlog::set_level(spdlog::level::trace);
     WFDnsClient client;
-    client.init("dns://119.29.29.29");
+    client.init("dns://119.29.29.29/");
 
     WFHttpServer server([&client](WFHttpTask *server_task)
     {

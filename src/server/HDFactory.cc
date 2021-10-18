@@ -59,8 +59,10 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 	{
 		spdlog::info("request DNS successfully...");
 
-		single_dns_context *sin_ctx =
+		auto sin_ctx =
 			static_cast<single_dns_context *>(series_of(dns_task->get_parent_task())->get_context());
+		spdlog::info("sin_ctx : {}", sin_ctx->test);
+		
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
