@@ -11,7 +11,7 @@
 class Util
 {
 public:
-    static std::string ip_bin_to_str(void *sa_sin_addr);
+    static std::string ip_bin_to_str(void *sa_sin_addr, bool ipv4 = true);
 
     static std::string get_peer_addr_str(WFHttpTask *server_task);
 };

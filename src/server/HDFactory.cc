@@ -54,31 +54,47 @@ ParallelWork *HDFactory::create_dns_paralell(WFDnsClient &dnsClient,
 
 static inline void __dns_callback(WFDnsTask *dns_task)
 {
+	spdlog::debug("__dns_callback");
 	if (dns_task->get_state() == WFT_STATE_SUCCESS)
 	{
 		spdlog::info("request DNS successfully...");
 
 		single_dns_context *sin_ctx =
-			static_cast<single_dns_context *>(series_of(dns_task)->get_context());
+			static_cast<single_dns_context *>(series_of(dns_task->get_parent_task())->get_context());
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
 		std::vector<std::string> ips;
+		int cnt = 0;
+		bool ipv4 = true;
 		while (cursor.next(&record))
 		{
+			if(cnt == 0)
+			{
+				// choose the first ttl
+				sin_ctx->js["ttl"] = record->ttl;
+				cnt++;
+			}
 			if (record->type == DNS_TYPE_A)
 			{
 				ips.emplace_back(Util::ip_bin_to_str(record->rdata));
-				sin_ctx->js["ttl"] = record->ttl;
+			}
+			else if (record->type == DNS_TYPE_AAAA)
+			{
+				ipv4 = false;
+				ips.emplace_back(Util::ip_bin_to_str(record->rdata, ipv4));
 			}
 		}
-		sin_ctx->js["ips"] = ips;
-		HttpResponse *server_resp = sin_ctx->server_task->get_resp();
-		server_resp->append_output_body(sin_ctx->js.dump());
+		if(ipv4)
+			sin_ctx->js["ips"] = ips;
+		else 
+			sin_ctx->js["ipsv6"] = ips;
 	}
 	else
 	{
-		spdlog::error("request DNS failed...");
+		
+		spdlog::error("request DNS failed, state = {}, error = {}, timeout reason = {}...", 
+				dns_task->get_state(), dns_task->get_error(), dns_task->get_timeout_reason());
 	}
 }
 
@@ -116,11 +132,11 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 	}
 }
 
-WFDnsTask *HDFactory::create_dns_task(WFDnsClient &dnsClient, const std::string &url, bool mutli)
+WFDnsTask *HDFactory::create_dns_task(WFDnsClient &dnsClient, const std::string &url, bool isMutli)
 {
 	spdlog::trace("create dns task");
 	WFDnsTask *dns_task;
-	if (mutli)
+	if (isMutli)
 	{
 		dns_task = dnsClient.create_dns_task(url, __dns_callback_multi);
 	}

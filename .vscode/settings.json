@@ -59,6 +59,11 @@
         "strstream": "cpp",
         "complex": "cpp",
         "iomanip": "cpp",
-        "cfenv": "cpp"
+        "cfenv": "cpp",
+        "bit": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "ranges": "cpp",
+        "stop_token": "cpp"
     }
 }

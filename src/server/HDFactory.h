@@ -19,7 +19,7 @@ public:
 	static WFDnsTask *
 	create_dns_task(WFDnsClient &dnsClient,
 					const std::string &url,
-					bool mutli = false);
+					bool isMutli = false);
 
 	static ParallelWork *
 	create_dns_paralell(WFDnsClient &dnsClient,

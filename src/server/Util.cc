@@ -2,13 +2,16 @@
 #include <spdlog/spdlog.h>
 
 static const int INET_ADDR_LEN = 128;  
-// 暂时只支持ipv4
-std::string Util::ip_bin_to_str(void* sa_sin_addr)
+
+std::string Util::ip_bin_to_str(void* sa_sin_addr, bool ipv4)
 {
-   struct sockaddr_in sa;
-   char str[INET_ADDR_LEN];
-   inet_ntop(AF_INET, sa_sin_addr, str, INET_ADDR_LEN);
-   return str;
+    struct sockaddr_in sa;
+    char str[INET_ADDR_LEN];
+    if(ipv4)
+        inet_ntop(AF_INET, sa_sin_addr, str, INET_ADDR_LEN);
+    else 
+        inet_ntop(AF_INET6, sa_sin_addr, str, INET_ADDR_LEN);
+    return str;
 }
 
 std::string Util::get_peer_addr_str(WFHttpTask *server_task) {
