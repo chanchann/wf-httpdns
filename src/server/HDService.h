@@ -15,11 +15,9 @@ class HDService
 {
 public:
 	static void single_dns_resolve(WFHttpTask *server_task,
-								   WFDnsClient &client,
 								   std::map<std::string, std::string> &query_split);
 
 	static void multi_dns_resolve(WFHttpTask *server_task,
-								  WFDnsClient &dnsClient,
 								  std::map<std::string, std::string> &query_split);
 };
 

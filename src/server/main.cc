@@ -23,10 +23,10 @@ int main()
 {
     signal(SIGINT, sig_handler);
     spdlog::set_level(spdlog::level::trace);
-    WFDnsClient client;
-    client.init("dns://119.29.29.29/");
 
-    WFHttpServer server([&client](WFHttpTask *server_task)
+    WFGlobal::get_dns_client()->init("dns://119.29.29.29/");
+
+    WFHttpServer server([](WFHttpTask *server_task)
     {
         const char *request_uri = server_task->get_req()->get_request_uri();
         const char *cur = request_uri;
@@ -40,12 +40,12 @@ int main()
 
         if (strcmp(path.c_str(), "/d") == 0)
         {
-            HDService::single_dns_resolve(server_task, client, query_split);
+            HDService::single_dns_resolve(server_task, query_split);
             return;
         }
         else if (strcmp(path.c_str(), "/resolve") == 0)
         {
-            HDService::multi_dns_resolve(server_task, client, query_split);
+            HDService::multi_dns_resolve(server_task, query_split);
             return;
         }
         else
@@ -59,7 +59,7 @@ int main()
     {
         wait_group.wait();
         server.stop();
-        client.deinit();
+        WFGlobal::get_dns_client()->deinit();
     }
 
     return 0;

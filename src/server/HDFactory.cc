@@ -4,26 +4,27 @@
 
 static inline void __parallel_callback(const ParallelWork *pwork)
 {
-	auto para_ctx = static_cast<parallel_context *>(series_of(pwork)->get_context());
-	auto dns_cxt_list = para_ctx->dns_context_list;
+	auto para_ctx = static_cast<parallel_context *>(pwork->get_context());
+	auto& dns_cxt_list = para_ctx->dns_context_list;
 
-	json dns_js;
-	for (auto dns_ctx : dns_cxt_list)
+	auto server_task = para_ctx->server_task;
+	auto gather_ctx = static_cast<gather_context *>(server_task->user_data);
+
 	{
-		to_json(dns_js, *dns_ctx);
-		para_ctx->js["dns"].push_back(dns_js);
-		delete dns_ctx;
+		std::lock_guard<std::mutex> lock(gather_ctx->mutex);
+		for (auto *dns_ctx : dns_cxt_list)
+		{
+			gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);
+		}
 	}
-
-	para_ctx->server_task->get_resp()->append_output_body(para_ctx->js.dump());
-
+	delete para_ctx;
 	spdlog::info("All series in this parallel have done");
 }
 
-SeriesWork *HDFactory::create_dns_series(WFDnsClient &dnsClient, const std::string &host)
+SeriesWork *HDFactory::create_dns_series(const std::string &host)
 {
 	spdlog::trace("create dns series");
-	WFDnsTask *dns_task = create_dns_task(dnsClient, host, true);
+	WFDnsTask *dns_task = create_dns_task(host, true);
 	SeriesWork *series = Workflow::create_series_work(dns_task, nullptr);
 
 	dns_context *dns_ctx = new dns_context;
@@ -33,8 +34,7 @@ SeriesWork *HDFactory::create_dns_series(WFDnsClient &dnsClient, const std::stri
 	return series;
 }
 
-ParallelWork *HDFactory::create_dns_paralell(WFDnsClient &dnsClient,
-											 std::map<std::string, std::string> &query_split)
+ParallelWork *HDFactory::create_dns_paralell(std::map<std::string, std::string> &query_split)
 {
 	auto host_list = StringUtil::split(query_split["host"], ',');
 	if (host_list.empty())
@@ -46,8 +46,7 @@ ParallelWork *HDFactory::create_dns_paralell(WFDnsClient &dnsClient,
 	ParallelWork *pwork = Workflow::create_parallel_work(__parallel_callback);
 	for (auto &host : host_list)
 	{
-		auto dns_series = create_dns_series(dnsClient, host);
-		pwork->add_series(dns_series);
+		pwork->add_series(create_dns_series(host));
 	}
 	return pwork;
 }
@@ -103,23 +102,33 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 	if (dns_task->get_state() == WFT_STATE_SUCCESS)
 	{
 		spdlog::info("request DNS successfully...");
-
+		
 		dns_context *dns_ctx =
 			static_cast<dns_context *>(series_of(dns_task)->get_context());
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
 		std::vector<std::string> ips;
+		int cnt = 0;
 		while (cursor.next(&record))
 		{
+			if(cnt == 0)
+			{
+				// choose the first ttl
+				dns_ctx->ttl = record->ttl;
+				cnt++;
+			}
 			if (record->type == DNS_TYPE_A)
 			{
-				dns_ctx->ips.emplace_back(Util::ip_bin_to_str(record->rdata));
-				dns_ctx->ttl = record->ttl;
+				ips.emplace_back(Util::ip_bin_to_str(record->rdata));
+			}
+			else if (record->type == DNS_TYPE_AAAA)
+			{
+				ips.emplace_back(Util::ip_bin_to_str(record->rdata, false));
 			}
 		}
-		auto pwork = dns_task->get_parent_task();
-		auto para_ctx = static_cast<parallel_context *>(series_of(pwork)->get_context());
+		
+		auto para_ctx = dns_ctx->para_ctx;
 		dns_ctx->client_ip = Util::get_peer_addr_str(para_ctx->server_task);
 		{
 			std::lock_guard<std::mutex> lock(para_ctx->mutex);
@@ -132,17 +141,18 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 	}
 }
 
-WFDnsTask *HDFactory::create_dns_task(WFDnsClient &dnsClient, const std::string &url, bool isMutli)
+WFDnsTask *HDFactory::create_dns_task(const std::string &url, bool isMutli)
 {
 	spdlog::trace("create dns task");
+	auto *dns_client = WFGlobal::get_dns_client();
 	WFDnsTask *dns_task;
 	if (isMutli)
 	{
-		dns_task = dnsClient.create_dns_task(url, __dns_callback_multi);
+		dns_task = dns_client->create_dns_task(url, __dns_callback_multi);
 	}
 	else
 	{
-		dns_task = dnsClient.create_dns_task(url, __dns_callback);
+		dns_task = dns_client->create_dns_task(url, __dns_callback);
 	}
 	return dns_task;
 }
