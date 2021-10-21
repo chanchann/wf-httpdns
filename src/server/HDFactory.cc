@@ -18,23 +18,29 @@ static inline void __parallel_callback(const ParallelWork *pwork)
 		}
 	}
 	delete para_ctx;
+	spdlog::trace("parallel context delete");
 	spdlog::info("All series in this parallel have done");
 }
 
-SeriesWork *HDFactory::create_dns_series(const std::string &host)
+SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string &host)
 {
 	spdlog::trace("create dns series");
 	WFDnsTask *dns_task = create_dns_task(host, true);
-	SeriesWork *series = Workflow::create_series_work(dns_task, nullptr);
+	SeriesWork *series = Workflow::create_series_work(dns_task, [](const SeriesWork*){
+		spdlog::info("tasks in series have done");
+	});
 
 	dns_context *dns_ctx = new dns_context;
 	dns_ctx->host = host;
+	dns_ctx->para_ctx = static_cast<parallel_context *>(pwork->get_context());
 	series->set_context(dns_ctx);
 
 	return series;
 }
 
-ParallelWork *HDFactory::create_dns_paralell(std::map<std::string, std::string> &query_split)
+ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task,
+											std::map<std::string, std::string> &query_split,
+											bool ipv4)
 {
 	auto host_list = StringUtil::split(query_split["host"], ',');
 	if (host_list.empty())
@@ -44,10 +50,17 @@ ParallelWork *HDFactory::create_dns_paralell(std::map<std::string, std::string> 
 	}
 
 	ParallelWork *pwork = Workflow::create_parallel_work(__parallel_callback);
+	parallel_context *para_ctx = new parallel_context;
+	para_ctx->server_task = server_task;
+	if(!ipv4)
+		para_ctx->ipv4 = false;
+	pwork->set_context(para_ctx);
+
 	for (auto &host : host_list)
 	{
-		pwork->add_series(create_dns_series(host));
+		pwork->add_series(create_dns_series(pwork, host));
 	}
+
 	return pwork;
 }
 
@@ -90,8 +103,7 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 			sin_ctx->js["ipsv6"] = ips;
 	}
 	else
-	{
-		
+	{	
 		spdlog::error("request DNS failed, state = {}, error = {}, timeout reason = {}...", 
 				dns_task->get_state(), dns_task->get_error(), dns_task->get_timeout_reason());
 	}
@@ -109,25 +121,19 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
 		std::vector<std::string> ips;
-		int cnt = 0;
+
 		while (cursor.next(&record))
 		{
-			if(cnt == 0)
-			{
-				// choose the first ttl
-				dns_ctx->ttl = record->ttl;
-				cnt++;
-			}
 			if (record->type == DNS_TYPE_A)
 			{
-				ips.emplace_back(Util::ip_bin_to_str(record->rdata));
+				dns_ctx->ips.emplace_back(Util::ip_bin_to_str(record->rdata));
 			}
 			else if (record->type == DNS_TYPE_AAAA)
 			{
-				ips.emplace_back(Util::ip_bin_to_str(record->rdata, false));
+				dns_ctx->ips.emplace_back(Util::ip_bin_to_str(record->rdata, false));
 			}
+			dns_ctx->ttl = record->ttl;
 		}
-		
 		auto para_ctx = dns_ctx->para_ctx;
 		dns_ctx->client_ip = Util::get_peer_addr_str(para_ctx->server_task);
 		{

@@ -95,73 +95,76 @@ void HDService::single_dns_resolve(WFHttpTask *server_task,
     series_of(server_task)->push_back(pwork);
 }
 
-static inline bool __build_task_graph(WFHttpTask *server_task,
+static inline void __graph_callback(const WFGraphTask *graph)
+{
+    auto *server_task = static_cast<WFHttpTask *>(graph->user_data);
+    auto *gather_ctx = static_cast<gather_context *>(server_task->user_data);
+    auto gather_list = gather_ctx->dns_ctx_gather_list;
+    json dns_js;
+    for (auto dns_ctx : gather_list)
+    { 
+        to_json(dns_js, *dns_ctx);
+        gather_ctx->js["dns"].push_back(dns_js);
+    }
+    server_task->get_resp()->append_output_body(gather_ctx->js.dump());
+    spdlog::info("{}", gather_ctx->js.dump());
+
+    spdlog::info("graph task done");
+}
+
+static inline WFGraphTask* __build_task_graph(WFHttpTask *server_task,
                                     std::map<std::string, std::string> &query_split)
 {
     spdlog::trace("build task graph");
     bool ipv4 = false, ipv6 = false;
     __check_query_field(ipv4, ipv6, query_split);
 
-    WFGraphTask *graph = WFTaskFactory::create_graph_task(nullptr);
-    WFGraphNode& server_node = graph->create_graph_node(server_task);
+    WFGraphTask *graph = WFTaskFactory::create_graph_task(__graph_callback);
 
+    graph->user_data = server_task;
     if(ipv4)
     {
-        ParallelWork *pwork_v4 = HDFactory::create_dns_paralell(query_split);
-        if (!pwork_v4) return false;
-
-        parallel_context *para_ctx = new parallel_context;
-        para_ctx->server_task = server_task;
-        pwork_v4->set_context(para_ctx);
+        ParallelWork *pwork_v4 = HDFactory::create_dns_paralell(server_task, query_split);
+        if (!pwork_v4) return nullptr;
 
         WFGraphNode& ipv4_node = graph->create_graph_node(pwork_v4);
-        server_node-->ipv4_node;
         spdlog::trace("connect ipv4 node");
     }
     if(ipv6)
     {
-        ParallelWork *pwork_v6 = HDFactory::create_dns_paralell(query_split);
-        if (!pwork_v6) return false;
-
-        parallel_context *para_ctx = new parallel_context;
-        para_ctx->ipv4 = false;
-        para_ctx->server_task = server_task;
-        pwork_v6->set_context(para_ctx);
+        ParallelWork *pwork_v6 = HDFactory::create_dns_paralell(server_task, query_split, false);
+        if (!pwork_v6) return nullptr;
         
         WFGraphNode& ipv6_node = graph->create_graph_node(pwork_v6);
-        server_node-->ipv6_node;
         spdlog::trace("connect ipv6 node");
     }	
-    return true;
+    return graph;
 }
 
 void HDService::multi_dns_resolve(WFHttpTask *server_task,
                                   std::map<std::string, std::string> &query_split)
 {
     spdlog::trace("multiple dns request");
-    if(!__build_task_graph(server_task, query_split))
+    auto *graph = __build_task_graph(server_task, query_split);
+    if(!graph)
     {
         server_task->get_resp()->append_output_body_nocopy(R"({"code": "host field is required"})", 34);
         return;
     }
+    **server_task << graph;
 
-    gather_context *para_ctx = new gather_context;
-    server_task->user_data = para_ctx;
+    gather_context *gather_ctx = new gather_context;
+    server_task->user_data = gather_ctx;
 
     server_task->set_callback([](WFHttpTask *server_task)
     {
         auto *gather_ctx = static_cast<gather_context *>(server_task->user_data);
-        auto gather_list = gather_ctx->dns_ctx_gather_list;
-        json dns_js;
-        for (auto dns_ctx : gather_list)
+        for(auto* dns_ctx : gather_ctx->dns_ctx_gather_list)
         {
-            to_json(dns_js, *dns_ctx);
-            gather_ctx->js["dns"].push_back(dns_js);
             delete dns_ctx;
         }
-        
-        server_task->get_resp()->append_output_body(gather_ctx->js.dump());
         delete gather_ctx;
-        spdlog::info("delete parallel context");
+        spdlog::trace("delete dns_ctx and gather ctx");
+        spdlog::info("server task done");
     });
 }

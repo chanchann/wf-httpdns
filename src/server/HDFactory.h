@@ -20,10 +20,13 @@ public:
 		create_dns_task(const std::string &url, bool isMutli = false);
 
 	static ParallelWork *
-		create_dns_paralell(std::map<std::string, std::string> &query_split);
+		create_dns_paralell(WFHttpTask *server_task,
+							std::map<std::string, std::string> &query_split,
+							bool ipv4 = true);
 
 private:
-	static SeriesWork *create_dns_series(const std::string &host);
+	static SeriesWork *create_dns_series(ParallelWork *pwork, 
+										const std::string &host);
 };
 
 #endif // _HDFACTORY_H_
