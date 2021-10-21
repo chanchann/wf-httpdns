@@ -19,6 +19,7 @@ public:
 
 	static void multi_dns_resolve(WFHttpTask *server_task,
 								  std::map<std::string, std::string> &query_split);
+
 };
 
 #endif // _HDSERVICE_H_

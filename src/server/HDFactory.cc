@@ -1,14 +1,15 @@
 #include "HDFactory.h"
 #include "Util.h"
 #include "Context.h"
+#include <workflow/DnsRoutine.h>
 
 static inline void __parallel_callback(const ParallelWork *pwork)
 {
-	auto para_ctx = static_cast<parallel_context *>(pwork->get_context());
-	auto& dns_cxt_list = para_ctx->dns_context_list;
+	auto para_ctx = static_cast<ParaDnsCtx *>(pwork->get_context());
+	auto& dns_cxt_list = para_ctx->DnsCtx_list;
 
 	auto server_task = para_ctx->server_task;
-	auto gather_ctx = static_cast<gather_context *>(server_task->user_data);
+	auto gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
 
 	{
 		std::lock_guard<std::mutex> lock(gather_ctx->mutex);
@@ -30,9 +31,9 @@ SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string 
 		spdlog::info("tasks in series have done");
 	});
 
-	dns_context *dns_ctx = new dns_context;
+	DnsCtx *dns_ctx = new DnsCtx;
 	dns_ctx->host = host;
-	dns_ctx->para_ctx = static_cast<parallel_context *>(pwork->get_context());
+	dns_ctx->para_ctx = static_cast<ParaDnsCtx *>(pwork->get_context());
 	series->set_context(dns_ctx);
 
 	return series;
@@ -50,7 +51,7 @@ ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task,
 	}
 
 	ParallelWork *pwork = Workflow::create_parallel_work(__parallel_callback);
-	parallel_context *para_ctx = new parallel_context;
+	ParaDnsCtx *para_ctx = new ParaDnsCtx;
 	para_ctx->server_task = server_task;
 	if(!ipv4)
 		para_ctx->ipv4 = false;
@@ -71,36 +72,43 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 		spdlog::info("request DNS successfully...");
 
 		auto sin_ctx =
-			static_cast<single_dns_context *>(series_of(dns_task->get_parent_task())->get_context());
+			static_cast<SingleDnsCtx *>(dns_task->user_data);
 		
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
 		std::vector<std::string> ips;
-		int cnt = 0;
-		bool ipv4 = true;
 		while (cursor.next(&record))
 		{
-			if(cnt == 0)
-			{
-				// choose the first ttl
-				sin_ctx->js["ttl"] = record->ttl;
-				cnt++;
-			}
 			if (record->type == DNS_TYPE_A)
 			{
-				ips.emplace_back(Util::ip_bin_to_str(record->rdata));
+				sin_ctx->ips.emplace_back(Util::ip_bin_to_str(record->rdata));
 			}
 			else if (record->type == DNS_TYPE_AAAA)
 			{
-				ipv4 = false;
-				ips.emplace_back(Util::ip_bin_to_str(record->rdata, ipv4));
+				sin_ctx->ipsv6.emplace_back(Util::ip_bin_to_str(record->rdata, false));
 			}
+			sin_ctx->ttl = record->ttl;
 		}
-		if(ipv4)
-			sin_ctx->js["ips"] = ips;
-		else 
-			sin_ctx->js["ipsv6"] = ips;
+		// put to cache
+		struct addrinfo *ai = NULL;
+		
+		// 暂时把port写死，看怎么组织合适
+		int ret = DnsUtil::getaddrinfo(dns_task->get_resp(), 80, &ai);
+		DnsOutput out;
+		DnsRoutine::create(&out, ret, ai);
+		const DnsCache::DnsHandle *addr_handle;
+		auto *dns_cache = WFGlobal::get_dns_cache();
+
+		// port fixed tempe
+		const auto *settings = WFGlobal::get_global_settings();
+		unsigned int dns_ttl_default = settings->dns_ttl_default;
+		unsigned int dns_ttl_min = settings->dns_ttl_min;
+		addr_handle = dns_cache->put(sin_ctx->host, 80, ai,
+									 dns_ttl_default,
+									 dns_ttl_min);
+
+		dns_cache->release(addr_handle);
 	}
 	else
 	{	
@@ -115,8 +123,8 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 	{
 		spdlog::info("request DNS successfully...");
 		
-		dns_context *dns_ctx =
-			static_cast<dns_context *>(series_of(dns_task)->get_context());
+		DnsCtx *dns_ctx =
+			static_cast<DnsCtx *>(series_of(dns_task)->get_context());
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
@@ -138,7 +146,7 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 		dns_ctx->client_ip = Util::get_peer_addr_str(para_ctx->server_task);
 		{
 			std::lock_guard<std::mutex> lock(para_ctx->mutex);
-			para_ctx->dns_context_list.push_back(dns_ctx);
+			para_ctx->DnsCtx_list.push_back(dns_ctx);
 		}
 	}
 	else

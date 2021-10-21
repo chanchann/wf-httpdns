@@ -34,7 +34,40 @@ Example 2 (Specify the resolution type): http://127.0.0.1:9001/d?host=ipv6.tsing
 
 When the request is successful, the HTTP response status code is 200, and the response result is expressed in JSON format. An example is as follows:
 
+
 ```
+http://127.0.0.1:9001/d?host=ipv6.tsinghua.edu.cn
+
+{
+    "host": "ipv6.tsinghua.edu.cn",
+    "ips": [
+        "166.111.8.205"
+    ],
+    "ttl": 21369,
+    "origin_ttl": 21600,
+    "client_ip": "118.199.22.176"
+}
+```
+
+```
+http://127.0.0.1:9001/d?host=www.baidu.com&query=4,6
+
+{
+    "ipsv6": [],
+    "host": "www.baidu.com",
+    "client_ip": "118.199.22.176",
+    "ips": [
+        "182.61.200.7",
+        "182.61.200.6"
+    ],
+    "ttl": 300,
+    "origin_ttl": 300
+}
+```
+
+```
+http://127.0.0.1:9001/d?host=ipv6.tsinghua.edu.cn&query=4,6
+
 {
     "client_ip": "172.17.0.1",
     "host": "ipv6.tsinghua.edu.cn",
@@ -47,6 +80,8 @@ When the request is successful, the HTTP response status code is 200, and the re
     "ttl": 7315
 }
 ```
+
+
 
 ## Batch domain name resolution interface
 

@@ -9,25 +9,41 @@
 
 using json = nlohmann::json;
 
-struct single_dns_context
+struct SingleDnsCtx
 {
-    json js;
+    std::string host;
+    std::vector<std::string> ips;
+    std::vector<std::string> ipsv6;
+    int ttl;
+    int origin_ttl;               
+    std::string client_ip;
     WFHttpTask *server_task;
 };
 
-struct parallel_context;
+static inline void to_json(json &js, const SingleDnsCtx &dns_ctx)
+{
+    js = json{
+        {"host", dns_ctx.host},
+        {"ips", dns_ctx.ips},
+        {"ipsv6", dns_ctx.ipsv6},   
+        {"ttl", dns_ctx.ttl},
+        {"origin_ttl", dns_ctx.origin_ttl},
+        {"client_ip", dns_ctx.client_ip}};
+}
 
-struct dns_context
+struct ParaDnsCtx;
+
+struct DnsCtx
 {
     std::string host;
     std::vector<std::string> ips;
     int ttl;
-    int origin_ttl; // todo : 1. how to get origin_ttl
+    int origin_ttl;                 // todo : 1. how to get origin_ttl
     std::string client_ip;
-    parallel_context *para_ctx;  // 串到上一层
+    ParaDnsCtx *para_ctx;  
 };
 
-static inline void to_json(json &js, const dns_context &dns_ctx)
+static inline void to_json(json &js, const DnsCtx &dns_ctx)
 {
     js = json{
         {"host", dns_ctx.host},
@@ -38,18 +54,18 @@ static inline void to_json(json &js, const dns_context &dns_ctx)
 }
 
 // for ipv4 / ipv6 parallel
-struct parallel_context
+struct ParaDnsCtx
 {
-    std::vector<dns_context *> dns_context_list;
+    std::vector<DnsCtx *> DnsCtx_list;
     std::mutex mutex;
     bool ipv4 = true;
     WFHttpTask *server_task;    // 串到上一层
 };
 
-struct gather_context
+struct GatherCtx
 {
     json js;
-    std::vector<dns_context *> dns_ctx_gather_list;
+    std::vector<DnsCtx *> dns_ctx_gather_list;
     std::mutex mutex;
 };
 
