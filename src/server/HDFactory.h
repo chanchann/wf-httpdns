@@ -17,12 +17,11 @@ class HDFactory
 {
 public:
 	static WFDnsTask *
-		create_dns_task(const std::string &url, bool isMutli = false);
+		create_dns_task(const std::string &url, bool is_batch = false);
 
 	static ParallelWork *
 		create_dns_paralell(WFHttpTask *server_task,
-							std::map<std::string, std::string> &query_split,
-							bool ipv4 = true);
+							std::vector<std::string> &host_list);
 
 private:
 	static SeriesWork *create_dns_series(ParallelWork *pwork, 

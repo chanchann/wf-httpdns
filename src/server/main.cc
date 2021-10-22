@@ -45,7 +45,7 @@ int main()
         }
         else if (strcmp(path.c_str(), "/resolve") == 0)
         {
-            HDService::multi_dns_resolve(server_task, query_split);
+            HDService::batch_dns_resolve(server_task, query_split);
             return;
         }
         else

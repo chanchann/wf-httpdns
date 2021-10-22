@@ -98,40 +98,78 @@ URL parameter description:
 
 - Example 
 
-Example 1: http://127.0.0.1:9001/resolve?host=www.baidu.com,www.tencent.com
-
-- Request succeed
+Example 1: http://127.0.0.1:9001/resolve?host=www.baidu.com,ipv6.tsinghua.edu.cn
 
 ```
 {
     "dns": [
         {
-            "client_ip": "172.17.0.1",
             "host": "www.baidu.com",
+            "client_ip": "106.121.166.99",
             "ips": [
-                "14.215.177.38",
-                "14.215.177.39"
+                "220.181.38.150",
+                "220.181.38.149"
             ],
-            "origin_ttl": 0,
-            "ttl": 254
+            "type": 1,
+            "ttl": 26,
+            "origin_ttl": 300
         },
         {
-            "client_ip": "172.17.0.1",
-            "host": "www.tencent.com",
+            "host": "ipv6.tsinghua.edu.cn",
+            "client_ip": "106.121.166.99",
             "ips": [
-                "211.152.148.99",
-                "211.152.148.87",
-                "211.152.148.77",
-                "211.152.148.72",
-                "211.152.148.44",
-                "211.152.148.29",
-                "211.152.148.84",
-                "211.152.148.30",
-                "211.152.148.78",
-                "211.152.149.16"
+                "166.111.8.205"
             ],
-            "origin_ttl": 0,
-            "ttl": 60
+            "type": 1,
+            "ttl": 21037,
+            "origin_ttl": 21600
+        }
+    ]
+}
+```
+
+Example 2: http://127.0.0.1:9001/resolve?host=www.baidu.com,ipv6.tsinghua.edu.cn&query=4,6
+
+```
+{
+    "dns": [
+        {
+            "host": "www.baidu.com",
+            "client_ip": "106.121.166.99",
+            "ips": [
+                "220.181.38.149",
+                "220.181.38.150"
+            ],
+            "type": 1,
+            "ttl": 295,
+            "origin_ttl": 300
+        },
+        {
+            "host": "www.baidu.com",
+            "client_ip": "106.121.166.99",
+            "ips": [],
+            "type": 28,
+            "ttl": 295
+        },
+        {
+            "host": "ipv6.tsinghua.edu.cn",
+            "client_ip": "106.121.166.99",
+            "ips": [
+                "166.111.8.205"
+            ],
+            "type": 1,
+            "ttl": 20996,
+            "origin_ttl": 21600
+        },
+        {
+            "host": "ipv6.tsinghua.edu.cn",
+            "client_ip": "106.121.166.99",
+            "ips": [
+                "2402:f000:1:881:0:0:8:205"
+            ],
+            "type": 28,
+            "ttl": 21006,
+            "origin_ttl": 21600
         }
     ]
 }

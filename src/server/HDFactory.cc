@@ -6,14 +6,12 @@
 static inline void __parallel_callback(const ParallelWork *pwork)
 {
 	auto para_ctx = static_cast<ParaDnsCtx *>(pwork->get_context());
-	auto& dns_cxt_list = para_ctx->DnsCtx_list;
 
 	auto server_task = para_ctx->server_task;
 	auto gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
-
 	{
 		std::lock_guard<std::mutex> lock(gather_ctx->mutex);
-		for (auto *dns_ctx : dns_cxt_list)
+		for (auto *dns_ctx :  para_ctx->DnsCtx_list)
 		{
 			gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);
 		}
@@ -27,6 +25,7 @@ SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string 
 {
 	spdlog::trace("create dns series");
 	WFDnsTask *dns_task = create_dns_task(host, true);
+
 	SeriesWork *series = Workflow::create_series_work(dns_task, [](const SeriesWork*){
 		spdlog::info("tasks in series have done");
 	});
@@ -34,27 +33,17 @@ SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string 
 	DnsCtx *dns_ctx = new DnsCtx;
 	dns_ctx->host = host;
 	dns_ctx->para_ctx = static_cast<ParaDnsCtx *>(pwork->get_context());
-	series->set_context(dns_ctx);
+	dns_task->user_data = dns_ctx;
 
 	return series;
 }
 
 ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task,
-											std::map<std::string, std::string> &query_split,
-											bool ipv4)
+											std::vector<std::string> &host_list)
 {
-	auto host_list = StringUtil::split(query_split["host"], ',');
-	if (host_list.empty())
-	{
-		spdlog::error("host is required field");
-		return nullptr;
-	}
-
 	ParallelWork *pwork = Workflow::create_parallel_work(__parallel_callback);
 	ParaDnsCtx *para_ctx = new ParaDnsCtx;
 	para_ctx->server_task = server_task;
-	if(!ipv4)
-		para_ctx->ipv4 = false;
 	pwork->set_context(para_ctx);
 
 	for (auto &host : host_list)
@@ -115,19 +104,18 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 	}
 }
 
-static inline void __dns_callback_multi(WFDnsTask *dns_task)
+static inline void __dns_callback_batch(WFDnsTask *dns_task)
 {
+	
 	if (dns_task->get_state() == WFT_STATE_SUCCESS)
 	{
 		spdlog::info("request DNS successfully...");
-		
 		DnsCtx *dns_ctx =
-			static_cast<DnsCtx *>(series_of(dns_task)->get_context());
+			static_cast<DnsCtx *>(dns_task->user_data);
+
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
-		std::vector<std::string> ips;
-
 		while (cursor.next(&record))
 		{
 			if (record->type == DNS_TYPE_A)
@@ -153,14 +141,14 @@ static inline void __dns_callback_multi(WFDnsTask *dns_task)
 	}
 }
 
-WFDnsTask *HDFactory::create_dns_task(const std::string &url, bool isMutli)
+WFDnsTask *HDFactory::create_dns_task(const std::string &url, bool is_batch)
 {
 	spdlog::trace("create dns task");
 	auto *dns_client = WFGlobal::get_dns_client();
 	WFDnsTask *dns_task;
-	if (isMutli)
+	if (is_batch)
 	{
-		dns_task = dns_client->create_dns_task(url, __dns_callback_multi);
+		dns_task = dns_client->create_dns_task(url, __dns_callback_batch);
 	}
 	else
 	{
