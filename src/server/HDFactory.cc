@@ -71,7 +71,7 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 	{
 		spdlog::info("request DNS successfully...");
 
-		auto sin_ctx =
+		auto *sin_ctx =
 			static_cast<SingleDnsCtx *>(dns_task->user_data);
 		
 		auto dns_resp = dns_task->get_resp();
@@ -93,8 +93,7 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 		// put to cache
 		struct addrinfo *ai = NULL;
 		
-		// 暂时把port写死，看怎么组织合适
-		int ret = DnsUtil::getaddrinfo(dns_task->get_resp(), 80, &ai);
+		int ret = DnsUtil::getaddrinfo(dns_task->get_resp(), sin_ctx->port, &ai);
 		DnsOutput out;
 		DnsRoutine::create(&out, ret, ai);
 		const DnsCache::DnsHandle *addr_handle;
@@ -104,7 +103,7 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 		const auto *settings = WFGlobal::get_global_settings();
 		unsigned int dns_ttl_default = settings->dns_ttl_default;
 		unsigned int dns_ttl_min = settings->dns_ttl_min;
-		addr_handle = dns_cache->put(sin_ctx->host, 80, ai,
+		addr_handle = dns_cache->put(sin_ctx->host, sin_ctx->port, ai,
 									 dns_ttl_default,
 									 dns_ttl_min);
 
