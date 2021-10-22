@@ -106,13 +106,41 @@ bool HDService::get_dns_cache(WFHttpTask *server_task,
     return true;
 }
 
+static inline void __parallel_callback(const ParallelWork *pwork)
+{
+    auto *server_task = static_cast<WFHttpTask *>(pwork->get_context());
+    auto sin_ctx = 
+        static_cast<SingleDnsCtx *>(server_task->user_data);
+
+    // put cache
+    auto *dns_cache = WFGlobal::get_dns_cache();
+    const auto *settings = WFGlobal::get_global_settings();
+    unsigned int dns_ttl_default = settings->dns_ttl_default;
+    unsigned int dns_ttl_min = settings->dns_ttl_min;
+    const DnsCache::DnsHandle *addr_handle;
+    addr_handle = dns_cache->put(sin_ctx->host, 
+                                sin_ctx->port, 
+                                sin_ctx->addrinfo,
+                                dns_ttl_default,
+                                dns_ttl_min);
+    dns_cache->release(addr_handle);
+
+    HttpResponse *server_resp = server_task->get_resp();
+    to_json(sin_ctx->js, *sin_ctx);
+    spdlog::info("res : {}", sin_ctx->js.dump());
+    server_resp->append_output_body(sin_ctx->js.dump());
+    spdlog::info("All series in this parallel have done");
+}
+
 void HDService::single_dns_resolve(WFHttpTask *server_task,
                                    std::map<std::string, std::string> &query_split)
 {
-    auto *dns_client = WFGlobal::get_dns_client();
     spdlog::trace("single dns request");
+
+    auto *dns_client = WFGlobal::get_dns_client();
     std::string host = check_host_field(server_task, query_split);
     if(host.empty()) return;
+    
     spdlog::info("Recv request {}", host);
 
     SingleDnsCtx *sin_ctx = new SingleDnsCtx;
@@ -126,17 +154,7 @@ void HDService::single_dns_resolve(WFHttpTask *server_task,
     if(get_dns_cache(server_task, host)) return;
     
     // if no cache
-    auto pwork = Workflow::create_parallel_work([](const ParallelWork *pwork)
-    {
-        auto *server_task = static_cast<WFHttpTask *>(pwork->get_context());
-        auto sin_ctx = 
-            static_cast<SingleDnsCtx *>(server_task->user_data);
-        HttpResponse *server_resp = server_task->get_resp();
-        to_json(sin_ctx->js, *sin_ctx);
-        spdlog::info("res : {}", sin_ctx->js.dump());
-		server_resp->append_output_body(sin_ctx->js.dump());
-        spdlog::info("All series in this parallel have done");
-    });
+    auto pwork = Workflow::create_parallel_work(__parallel_callback);
     pwork->set_context(server_task);
 
     if(sin_ctx->ipv4) 

@@ -77,7 +77,6 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 		auto dns_resp = dns_task->get_resp();
 		DnsResultCursor cursor(dns_resp);
 		dns_record *record = nullptr;
-		std::vector<std::string> ips;
 		while (cursor.next(&record))
 		{
 			if (record->type == DNS_TYPE_A)
@@ -90,24 +89,24 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 			}
 			sin_ctx->ttl = record->ttl;
 		}
+
 		// put to cache
 		struct addrinfo *ai = NULL;
 		
 		int ret = DnsUtil::getaddrinfo(dns_task->get_resp(), sin_ctx->port, &ai);
 		DnsOutput out;
-		DnsRoutine::create(&out, ret, ai);
-		const DnsCache::DnsHandle *addr_handle;
-		auto *dns_cache = WFGlobal::get_dns_cache();
-
-		// port fixed tempe
-		const auto *settings = WFGlobal::get_global_settings();
-		unsigned int dns_ttl_default = settings->dns_ttl_default;
-		unsigned int dns_ttl_min = settings->dns_ttl_min;
-		addr_handle = dns_cache->put(sin_ctx->host, sin_ctx->port, ai,
-									 dns_ttl_default,
-									 dns_ttl_min);
-
-		dns_cache->release(addr_handle);
+		DnsRoutine::create(&out, ret, ai);		
+		struct addrinfo *addrinfo = out.move_addrinfo();   // key
+		
+		std::lock_guard<std::mutex> lock(sin_ctx->mutex);
+		if(sin_ctx->addrinfo)
+		{
+			sin_ctx->addrinfo->ai_next = addrinfo;
+		}
+		else 
+		{
+			sin_ctx->addrinfo = addrinfo;
+		}
 	}
 	else
 	{	

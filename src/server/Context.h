@@ -17,11 +17,14 @@ struct SingleDnsCtx
     int ttl;
     int origin_ttl;               
     std::string client_ip;
+    
     WFHttpTask *server_task;
+    struct addrinfo *addrinfo;
     unsigned int port;
     bool ipv4;
     bool ipv6;
     json js;
+    std::mutex mutex;
 };
 
 static inline void to_json(json &js, const SingleDnsCtx &dns_ctx)
