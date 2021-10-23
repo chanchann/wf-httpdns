@@ -160,22 +160,6 @@ static inline void __graph_callback(const WFGraphTask *graph)
     spdlog::info("graph task done");
 }
 
-void HDService::go_dns_cache(WFHttpTask *server_task, const std::vector<std::string>& host_list, bool ipv4)
-{
-    auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
-    GoCtx *go_ctx = new GoCtx;
-    gather_ctx->go_ctx = go_ctx;
-    if(ipv4)
-    {
-        go_ctx->not_int_cache_map["ipv4"] = get_dns_cache_batch(server_task, host_list);
-    }
-    else 
-    {
-        go_ctx->not_int_cache_map["ipv6"] = get_dns_cache_batch(server_task, host_list);
-    }
-
-}
-
 WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
                                         const std::vector<std::string>& host_list) 
 {
@@ -188,27 +172,22 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
     if(gather_ctx->ipv4)
     {
         // first get cache 
-        WFGoTask *cache_v4_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, true);
-        WFGraphNode& cache_ipv4_node = graph->create_graph_node(cache_v4_task);
-
-        ParallelWork *pwork_v4 = HDFactory::create_dns_paralell(server_task);
+        auto not_in_cache_list = get_dns_cache_batch(server_task, host_list);
+        ParallelWork *pwork_v4 = HDFactory::create_dns_paralell(server_task, not_in_cache_list);
         if (pwork_v4)
         {
             WFGraphNode& ipv4_node = graph->create_graph_node(pwork_v4);
-            cache_ipv4_node-->ipv4_node;
             spdlog::trace("connect ipv4 node");
         }
     }
     if(gather_ctx->ipv6)
     {
-        WFGoTask *cache_v6_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, false);
-        WFGraphNode& cache_ipv6_node = graph->create_graph_node(cache_v6_task);
+        auto not_in_cache_list = get_dns_cache_batch(server_task, host_list);
 
-        ParallelWork *pwork_v6 = HDFactory::create_dns_paralell(server_task, false);
+        ParallelWork *pwork_v6 = HDFactory::create_dns_paralell(server_task, not_in_cache_list);
         if (pwork_v6)
         {
             WFGraphNode& ipv6_node = graph->create_graph_node(pwork_v6);
-            cache_ipv6_node-->ipv6_node;
             spdlog::trace("connect ipv6 node");
         }
     }	
@@ -298,9 +277,8 @@ void HDService::batch_dns_resolve(WFHttpTask *server_task,
         {
             delete dns_ctx;
         }
-        delete gather_ctx->go_ctx;
         delete gather_ctx;
-        spdlog::trace("delete go_ctx, dns_ctx and gather ctx");
+        spdlog::trace("delete dns_ctx and gather ctx");
         spdlog::info("server task done");
     });
 

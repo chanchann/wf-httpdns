@@ -49,7 +49,6 @@ struct DnsCtx
     std::string client_ip;
     ParaDnsCtx *para_ctx;  
     unsigned int port;
-    struct addrinfo *addrinfo;
 };
 
 static inline void to_json(json &js, const DnsCtx &dns_ctx)
@@ -66,14 +65,7 @@ static inline void to_json(json &js, const DnsCtx &dns_ctx)
 // for ipv4 / ipv6 parallel
 struct ParaDnsCtx
 {
-    std::vector<DnsCtx *> DnsCtx_list;
-    std::mutex mutex;
     WFHttpTask *server_task;    // 串到上一层
-};
-
-struct GoCtx 
-{
-    std::unordered_map<std::string, std::vector<std::string> > not_int_cache_map;
 };
 
 struct GatherCtx
@@ -83,7 +75,6 @@ struct GatherCtx
     std::mutex mutex;
     bool ipv4;
     bool ipv6;
-    GoCtx *go_ctx;
 };
 
 
