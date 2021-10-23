@@ -3,41 +3,35 @@
 #include "Context.h"
 #include <workflow/DnsRoutine.h>
 
-static inline void __parallel_callback(const ParallelWork *pwork)
-{
-	delete static_cast<ParaDnsCtx *>(pwork->get_context());
-
-	spdlog::trace("parallel context delete");
-	spdlog::info("All series in this parallel have done");
-}
-
 SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string &host)
 {
 	spdlog::trace("create dns series");
-	WFDnsTask *dns_task = create_dns_task(host, true);
+	DnsCtx *dns_ctx = new DnsCtx;
+	if(!Util::split_host_port(dns_ctx, host))
+	{
+		delete dns_ctx;
+		spdlog::error("url is invalid");
+		return nullptr;
+	}
+	dns_ctx->server_task = static_cast<WFHttpTask *>(pwork->get_context());
 
+	WFDnsTask *dns_task = create_dns_task(host, true);
+	dns_task->user_data = dns_ctx;
 	SeriesWork *series = Workflow::create_series_work(dns_task, [](const SeriesWork*){
 		spdlog::info("tasks in series have done");
 	});
-
-	DnsCtx *dns_ctx = new DnsCtx;
-	dns_ctx->host = host;
-	dns_ctx->para_ctx = static_cast<ParaDnsCtx *>(pwork->get_context());
-	dns_task->user_data = dns_ctx;
-
 	return series;
 }
 
 ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task, const std::vector<std::string>& not_in_cache_list)
-{
-	auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
-	
+{	
 	if(not_in_cache_list.empty()) return nullptr;
 	
-	ParallelWork *pwork = Workflow::create_parallel_work(__parallel_callback);
-	ParaDnsCtx *para_ctx = new ParaDnsCtx;
-	para_ctx->server_task = server_task;
-	pwork->set_context(para_ctx);
+	ParallelWork *pwork = Workflow::create_parallel_work([](const ParallelWork *pwork){
+		spdlog::info("All series in this parallel have done");
+	});
+
+	pwork->set_context(server_task);
 
 	for (auto &host : not_in_cache_list)
 	{
@@ -91,7 +85,6 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 
 static inline void __dns_callback_batch(WFDnsTask *dns_task)
 {
-	
 	if (dns_task->get_state() == WFT_STATE_SUCCESS)
 	{
 		spdlog::info("request DNS successfully...");
@@ -113,8 +106,7 @@ static inline void __dns_callback_batch(WFDnsTask *dns_task)
 			}
 			dns_ctx->ttl = record->ttl;
 		}
-		auto para_ctx = dns_ctx->para_ctx;
-		auto server_task = para_ctx->server_task;
+		auto server_task = dns_ctx->server_task;
 		auto gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
 		dns_ctx->client_ip = Util::get_peer_addr_str(server_task);
 
@@ -130,12 +122,14 @@ static inline void __dns_callback_batch(WFDnsTask *dns_task)
 		unsigned int dns_ttl_default = settings->dns_ttl_default;
 		unsigned int dns_ttl_min = settings->dns_ttl_min;
 
+		spdlog::info("put cache : {} - {}", dns_ctx->host, dns_ctx->port);
 		auto *addr_handle = dns_cache->put(dns_ctx->host, 
 										dns_ctx->port, 
 										addrinfo,
 										dns_ttl_default,
 										dns_ttl_min);
 		dns_cache->release(addr_handle);
+
 		{
 			std::lock_guard<std::mutex> lock(gather_ctx->mutex);
 			gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);

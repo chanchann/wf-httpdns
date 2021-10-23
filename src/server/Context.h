@@ -38,8 +38,6 @@ static inline void to_json(json &js, const SingleDnsCtx &dns_ctx)
     };
 }
 
-struct ParaDnsCtx;
-
 struct DnsCtx
 {
     std::string host;
@@ -47,8 +45,8 @@ struct DnsCtx
     int ttl;
     int origin_ttl;                 // todo : 1. how to get origin_ttl
     std::string client_ip;
-    ParaDnsCtx *para_ctx;  
     unsigned int port;
+    WFHttpTask *server_task;
 };
 
 static inline void to_json(json &js, const DnsCtx &dns_ctx)
@@ -61,12 +59,6 @@ static inline void to_json(json &js, const DnsCtx &dns_ctx)
         {"client_ip", dns_ctx.client_ip}
     };
 }
-
-// for ipv4 / ipv6 parallel
-struct ParaDnsCtx
-{
-    WFHttpTask *server_task;    // 串到上一层
-};
 
 struct GatherCtx
 {

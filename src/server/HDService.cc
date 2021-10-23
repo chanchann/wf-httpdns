@@ -29,8 +29,10 @@ bool HDService::get_dns_cache(WFHttpTask *server_task,
 {   
     spdlog::info("get dns cache url : {}", url);
     auto *sin_ctx = static_cast<SingleDnsCtx *>(server_task->user_data);
-    if(!split_host_port(sin_ctx, url)) return false;
-
+    if(!Util::split_host_port(sin_ctx, url)) {
+        spdlog::error("url is invalid");
+        return false;
+    }
     auto *dns_cache = WFGlobal::get_dns_cache();
     auto *addr_handle = dns_cache->get(sin_ctx->host, sin_ctx->port);
     if(addr_handle) 
@@ -171,6 +173,8 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
 
     if(gather_ctx->ipv4)
     {
+
+        // todo : we should build get_dns_cache_batch to a node
         // first get cache 
         auto not_in_cache_list = get_dns_cache_batch(server_task, host_list);
         ParallelWork *pwork_v4 = HDFactory::create_dns_paralell(server_task, not_in_cache_list);
@@ -195,20 +199,23 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
 }
 
 bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
-                                        const std::string &url)
+                                    const std::string &url,
+                                    bool ipv4)
 {
     spdlog::info("get dns cache[batch] url : {}", url);
     DnsCtx *dns_ctx = new DnsCtx;
 
-    if(!split_host_port(dns_ctx, url)) 
+    if(!Util::split_host_port(dns_ctx, url)) 
     {
+        spdlog::error("url is invalid");
         delete dns_ctx;
         return false;
     }
     auto *dns_cache = WFGlobal::get_dns_cache();
+    
+    spdlog::info("get cache : {} - {}", dns_ctx->host, dns_ctx->port);
     auto *addr_handle = dns_cache->get(dns_ctx->host, dns_ctx->port);
-
-    auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
+    
     if(addr_handle) 
     {
         spdlog::info("batch get cache");
@@ -216,12 +223,12 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
         dns_ctx->ttl = addr_handle->value.expire_time;
         char ip_str[128];
         do {
-            if(addrinfo->ai_family == AF_INET && gather_ctx->ipv4)
+            if(addrinfo->ai_family == AF_INET && ipv4)
             {
                 inet_ntop(AF_INET, &(((struct sockaddr_in *)addrinfo->ai_addr)->sin_addr), ip_str, 128);
                 dns_ctx->ips.push_back(ip_str);
             }
-            else if(addrinfo->ai_family == AF_INET6 && gather_ctx->ipv6)
+            else if(addrinfo->ai_family == AF_INET6 && !ipv4)
             {
                 inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)addrinfo->ai_addr)->sin6_addr), ip_str, 128);
                 dns_ctx->ips.push_back(ip_str);
@@ -231,6 +238,7 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
 
         dns_cache->release(addr_handle);
 
+        auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
         gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);
     }
     else 
