@@ -19,9 +19,7 @@ public:
 	static WFDnsTask *
 		create_dns_task(const std::string &url, bool is_batch = false);
 
-	static ParallelWork *
-		create_dns_paralell(WFHttpTask *server_task,
-							std::vector<std::string> &host_list);
+	static ParallelWork *create_dns_paralell(WFHttpTask *server_task);
 
 private:
 	static SeriesWork *create_dns_series(ParallelWork *pwork, 

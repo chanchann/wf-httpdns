@@ -38,9 +38,12 @@ SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string 
 	return series;
 }
 
-ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task,
-											std::vector<std::string> &host_list)
+ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task)
 {
+	auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
+	auto *go_ctx = gather_ctx->go_ctx;
+	if(go_ctx->not_int_cache_list.empty()) return nullptr;
+	
 	ParallelWork *pwork = Workflow::create_parallel_work(__parallel_callback);
 	ParaDnsCtx *para_ctx = new ParaDnsCtx;
 	para_ctx->server_task = server_task;

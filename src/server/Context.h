@@ -71,6 +71,11 @@ struct ParaDnsCtx
     WFHttpTask *server_task;    // 串到上一层
 };
 
+struct GoCtx 
+{
+    std::unordered_map<std::string, std::vector<std::string> > not_int_cache_map;
+};
+
 struct GatherCtx
 {
     json js;
@@ -78,6 +83,9 @@ struct GatherCtx
     std::mutex mutex;
     bool ipv4;
     bool ipv6;
+    GoCtx *go_ctx;
 };
+
+
 
 #endif // _CONTEXT_H_
