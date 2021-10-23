@@ -144,6 +144,7 @@ void HDService::single_dns_resolve(WFHttpTask *server_task,
 
 static inline void __graph_callback(const WFGraphTask *graph)
 {
+    // gather all the info to json here
     auto *server_task = static_cast<WFHttpTask *>(graph->user_data);
     auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
     
@@ -187,7 +188,7 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
     if(gather_ctx->ipv4)
     {
         // first get cache 
-        WFGoTask *cache_v4_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list);
+        WFGoTask *cache_v4_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, true);
         WFGraphNode& cache_ipv4_node = graph->create_graph_node(cache_v4_task);
 
         ParallelWork *pwork_v4 = HDFactory::create_dns_paralell(server_task);
@@ -200,10 +201,10 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
     }
     if(gather_ctx->ipv6)
     {
-        WFGoTask *cache_v6_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list);
+        WFGoTask *cache_v6_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, false);
         WFGraphNode& cache_ipv6_node = graph->create_graph_node(cache_v6_task);
 
-        ParallelWork *pwork_v6 = HDFactory::create_dns_paralell(server_task);
+        ParallelWork *pwork_v6 = HDFactory::create_dns_paralell(server_task, false);
         if (pwork_v6)
         {
             WFGraphNode& ipv6_node = graph->create_graph_node(pwork_v6);
@@ -218,7 +219,6 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
                                         const std::string &url)
 {
     spdlog::info("get dns cache[batch] url : {}", url);
-    auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
     DnsCtx *dns_ctx = new DnsCtx;
 
     if(!split_host_port(dns_ctx, url)) 
@@ -228,6 +228,8 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
     }
     auto *dns_cache = WFGlobal::get_dns_cache();
     auto *addr_handle = dns_cache->get(dns_ctx->host, dns_ctx->port);
+
+    auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
     if(addr_handle) 
     {
         spdlog::info("batch get cache");
@@ -266,7 +268,6 @@ std::vector<std::string> HDService::get_dns_cache_batch(WFHttpTask *server_task,
                                         const std::vector<std::string> &url_list)
 {
     std::vector<std::string> not_in_dns_list;
-    auto* gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
     for(auto &url : url_list)
     {
         // not find dns record reserve to http req
@@ -291,6 +292,7 @@ void HDService::batch_dns_resolve(WFHttpTask *server_task,
 
    server_task->set_callback([](WFHttpTask *server_task)
     {
+        // delete all the new (excpet parallel) here
         auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
         for(auto* dns_ctx : gather_ctx->dns_ctx_gather_list)
         {
@@ -308,22 +310,6 @@ void HDService::batch_dns_resolve(WFHttpTask *server_task,
 		spdlog::error("host is required field");
 		return;
 	}
-    // get cache here
-    // auto not_in_dns_list = get_dns_cache_batch(server_task, host_list);
-    // no need to loop up via http
-    // if(not_in_dns_list.empty()) 
-    // {
-    //     spdlog::info("all the dns records are in cache");
-    //     json dns_js;
-    //     for(auto& dns_ctx: gather_ctx->dns_ctx_gather_list)
-    //     {
-    //         to_json(dns_js, *dns_ctx);
-    //         gather_ctx->js["dns"].push_back(dns_js);
-    //     }
-    //     server_task->get_resp()->append_output_body(gather_ctx->js.dump());
-    //     spdlog::info("{}", gather_ctx->js.dump());
-    //     return;
-    // }
 
     auto *graph = build_task_graph(server_task, host_list);
     if(!graph)

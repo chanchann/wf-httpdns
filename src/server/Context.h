@@ -24,7 +24,6 @@ struct SingleDnsCtx
     bool ipv4;
     bool ipv6;
     json js;
-    std::mutex mutex;
 };
 
 static inline void to_json(json &js, const SingleDnsCtx &dns_ctx)
@@ -50,6 +49,7 @@ struct DnsCtx
     std::string client_ip;
     ParaDnsCtx *para_ctx;  
     unsigned int port;
+    struct addrinfo *addrinfo;
 };
 
 static inline void to_json(json &js, const DnsCtx &dns_ctx)

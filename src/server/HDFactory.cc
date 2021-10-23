@@ -8,11 +8,26 @@ static inline void __parallel_callback(const ParallelWork *pwork)
 	auto para_ctx = static_cast<ParaDnsCtx *>(pwork->get_context());
 
 	auto server_task = para_ctx->server_task;
+
+	auto *dns_cache = WFGlobal::get_dns_cache();
+    const auto *settings = WFGlobal::get_global_settings();
+    unsigned int dns_ttl_default = settings->dns_ttl_default;
+    unsigned int dns_ttl_min = settings->dns_ttl_min;
+    const DnsCache::DnsHandle *addr_handle;
+
 	auto gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
 	{
-		std::lock_guard<std::mutex> lock(gather_ctx->mutex);
 		for (auto *dns_ctx :  para_ctx->DnsCtx_list)
 		{
+			// put to cache
+			addr_handle = dns_cache->put(dns_ctx->host, 
+										dns_ctx->port, 
+										dns_ctx->addrinfo,
+										dns_ttl_default,
+										dns_ttl_min);
+			dns_cache->release(addr_handle);
+			// gather 
+			std::lock_guard<std::mutex> lock(gather_ctx->mutex);
 			gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);
 		}
 	}
@@ -38,18 +53,28 @@ SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string 
 	return series;
 }
 
-ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task)
+ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task, bool ipv4)
 {
 	auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
 	auto *go_ctx = gather_ctx->go_ctx;
-	if(go_ctx->not_int_cache_list.empty()) return nullptr;
+	
+	std::vector<std::string> not_int_cache_list;
+	if(ipv4)
+	{
+		not_int_cache_list = go_ctx->not_int_cache_map["ipv4"];
+	}
+	else 
+	{
+		not_int_cache_list = go_ctx->not_int_cache_map["ipv6"];
+	}
+	if(not_int_cache_list.empty()) return nullptr;
 	
 	ParallelWork *pwork = Workflow::create_parallel_work(__parallel_callback);
 	ParaDnsCtx *para_ctx = new ParaDnsCtx;
 	para_ctx->server_task = server_task;
 	pwork->set_context(para_ctx);
 
-	for (auto &host : host_list)
+	for (auto &host : not_int_cache_list)
 	{
 		pwork->add_series(create_dns_series(pwork, host));
 	}
@@ -89,16 +114,8 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 		DnsOutput out;
 		DnsRoutine::create(&out, ret, ai);		
 		struct addrinfo *addrinfo = out.move_addrinfo();   // key
-		
-		std::lock_guard<std::mutex> lock(sin_ctx->mutex);
-		if(sin_ctx->addrinfo)
-		{
-			sin_ctx->addrinfo->ai_next = addrinfo;
-		}
-		else 
-		{
-			sin_ctx->addrinfo = addrinfo;
-		}
+
+		sin_ctx->addrinfo = addrinfo;
 	}
 	else
 	{	
@@ -136,7 +153,19 @@ static inline void __dns_callback_batch(WFDnsTask *dns_task)
 		{
 			std::lock_guard<std::mutex> lock(para_ctx->mutex);
 			para_ctx->DnsCtx_list.push_back(dns_ctx);
+			// todo : we can jump this step, directly gather dns_ctx 
+			// todo : and we put cache here .....
 		}
+
+		// gather addrinfo
+		struct addrinfo *ai = NULL;
+		
+		int ret = DnsUtil::getaddrinfo(dns_resp, dns_ctx->port, &ai);
+		DnsOutput out;
+		DnsRoutine::create(&out, ret, ai);		
+		struct addrinfo *addrinfo = out.move_addrinfo();   // key
+		
+		dns_ctx->addrinfo = addrinfo;     // todo : should we free ourselves?
 	}
 	else
 	{
