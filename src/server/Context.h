@@ -67,6 +67,9 @@ struct GatherCtx
     std::mutex mutex;
     bool ipv4;
     bool ipv6;
+    
+    std::vector<std::string> not_in_cache_v4;
+    std::vector<std::string> not_in_cache_v6;
 };
 
 

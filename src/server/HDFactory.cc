@@ -23,22 +23,31 @@ SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string 
 	return series;
 }
 
-ParallelWork *HDFactory::create_dns_paralell(WFHttpTask *server_task, const std::vector<std::string>& not_in_cache_list)
+void HDFactory::start_dns_paralell(WFHttpTask *server_task, bool ipv4)
 {	
-	if(not_in_cache_list.empty()) return nullptr;
+	std::vector<std::string> *not_in_cache_list;
+	auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
+	if(ipv4)
+	{
+		not_in_cache_list = &gather_ctx->not_in_cache_v4;
+	} else 
+	{
+		not_in_cache_list = &gather_ctx->not_in_cache_v6;
+	}
+	if((*not_in_cache_list).empty()) return;
 	
 	ParallelWork *pwork = Workflow::create_parallel_work([](const ParallelWork *pwork){
-		spdlog::info("All series in this parallel have done");
+		spdlog::trace("All series in this parallel have done");
 	});
 
 	pwork->set_context(server_task);
-
-	for (auto &host : not_in_cache_list)
+	
+	for (auto &host : *not_in_cache_list)
 	{
+		spdlog::info("host : {}", host);
 		pwork->add_series(create_dns_series(pwork, host));
 	}
-
-	return pwork;
+	pwork->start();
 }
 
 static inline void __dns_callback(WFDnsTask *dns_task)

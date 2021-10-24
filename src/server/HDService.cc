@@ -159,13 +159,13 @@ static inline void __graph_callback(const WFGraphTask *graph)
     server_task->get_resp()->append_output_body(gather_ctx->js.dump());
     spdlog::info("{}", gather_ctx->js.dump());
 
-    spdlog::info("graph task done");
+    spdlog::trace("Graph task done ...");
 }
 
 WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
                                         const std::vector<std::string>& host_list) 
 {
-    spdlog::trace("build task graph");
+    spdlog::trace("Build task graph ...");
     auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
 
     WFGraphTask *graph = WFTaskFactory::create_graph_task(__graph_callback);
@@ -173,27 +173,25 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
 
     if(gather_ctx->ipv4)
     {
+        WFGoTask *cache_v4_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, true);
+        WFGraphNode& cache_v4_node = graph->create_graph_node(cache_v4_task);
 
-        // todo : we should build get_dns_cache_batch to a node
-        // first get cache 
-        auto not_in_cache_list = get_dns_cache_batch(server_task, host_list);
-        ParallelWork *pwork_v4 = HDFactory::create_dns_paralell(server_task, not_in_cache_list);
-        if (pwork_v4)
-        {
-            WFGraphNode& ipv4_node = graph->create_graph_node(pwork_v4);
-            spdlog::trace("connect ipv4 node");
-        }
+        WFGoTask *pwork_v4_task = WFTaskFactory::create_go_task("batch", HDFactory::start_dns_paralell, server_task, true);
+        WFGraphNode& pwork_v4_node = graph->create_graph_node(pwork_v4_task);
+        cache_v4_node-->pwork_v4_node;
+
+        spdlog::trace("Connect ipv4 node ...");
     }
     if(gather_ctx->ipv6)
     {
-        auto not_in_cache_list = get_dns_cache_batch(server_task, host_list);
+        WFGoTask *cache_v6_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, true);
+        WFGraphNode& cache_v6_node = graph->create_graph_node(cache_v6_task);
 
-        ParallelWork *pwork_v6 = HDFactory::create_dns_paralell(server_task, not_in_cache_list);
-        if (pwork_v6)
-        {
-            WFGraphNode& ipv6_node = graph->create_graph_node(pwork_v6);
-            spdlog::trace("connect ipv6 node");
-        }
+        WFGoTask *pwork_v6_task = WFTaskFactory::create_go_task("batch", HDFactory::start_dns_paralell, server_task, true);
+        WFGraphNode& pwork_v6_node = graph->create_graph_node(pwork_v6_task);
+        cache_v6_node-->pwork_v6_node;
+
+        spdlog::trace("Connect ipv4 node ...");
     }	
     return graph;
 }
@@ -202,7 +200,6 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
                                     const std::string &url,
                                     bool ipv4)
 {
-    spdlog::info("get dns cache[batch] url : {}", url);
     DnsCtx *dns_ctx = new DnsCtx;
 
     if(!Util::split_host_port(dns_ctx, url)) 
@@ -218,7 +215,7 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
     
     if(addr_handle) 
     {
-        spdlog::info("batch get cache");
+        spdlog::info("Batch get cache");
         struct addrinfo *addrinfo = addr_handle->value.addrinfo;
         dns_ctx->ttl = addr_handle->value.expire_time;
         char ip_str[128];
@@ -243,7 +240,7 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
     }
     else 
     {
-        spdlog::info("no cache");
+        spdlog::info("No cache found ...");
         delete dns_ctx;
         return false;
     }
@@ -251,35 +248,44 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
 }
 
 
-std::vector<std::string> HDService::get_dns_cache_batch(WFHttpTask *server_task,
-                                        const std::vector<std::string> &url_list)
+void HDService::go_dns_cache(WFHttpTask *server_task,
+                                    const std::vector<std::string> &url_list,
+                                    bool ipv4)
 {
+    spdlog::trace("go dns cache");
     std::vector<std::string> not_in_dns_list;
     for(auto &url : url_list)
     {
         // not find dns record reserve to http req
-        if(!get_dns_cache_batch(server_task, url))
+        if(!get_dns_cache_batch(server_task, url, ipv4))
         {
             not_in_dns_list.push_back(url);
         }
     }
-    spdlog::info("get dns cache batch done");
-    return not_in_dns_list;
+    auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
+    if(ipv4) 
+    {   
+        gather_ctx->not_in_cache_v4 = std::move(not_in_dns_list);
+    }
+    else 
+    {
+        gather_ctx->not_in_cache_v6 = std::move(not_in_dns_list);
+    }
 }
 
 
 void HDService::batch_dns_resolve(WFHttpTask *server_task,
                                   std::map<std::string, std::string> &query_split)
 {
-    spdlog::trace("multiple dns request");
+    spdlog::trace("batch dns request");
 
     GatherCtx *gather_ctx = new GatherCtx;
     server_task->user_data = gather_ctx;
     check_query_field(gather_ctx, query_split);
 
-   server_task->set_callback([](WFHttpTask *server_task)
+    server_task->set_callback([](WFHttpTask *server_task)
     {
-        // delete all the new (excpet parallel) here
+        // delete all the object on heap here
         auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
         for(auto* dns_ctx : gather_ctx->dns_ctx_gather_list)
         {
@@ -289,20 +295,16 @@ void HDService::batch_dns_resolve(WFHttpTask *server_task,
         spdlog::trace("delete dns_ctx and gather ctx");
         spdlog::info("server task done");
     });
-
+    // todo : process host name 
 	auto host_list = StringUtil::split(query_split["host"], ',');
 	if (host_list.empty())
 	{
-		spdlog::error("host is required field");
+        server_task->get_resp()->append_output_body_nocopy(R"("code": "MissingArgument")", 25);
+		spdlog::error("Host field is required ...");
 		return;
 	}
 
     auto *graph = build_task_graph(server_task, host_list);
-    if(!graph)
-    {
-        server_task->get_resp()->append_output_body_nocopy(R"("code": "MissingArgument")", 25);
-        return;
-    }
     **server_task << graph;
 }
 

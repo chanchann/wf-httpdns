@@ -28,8 +28,9 @@ private:
 	static bool get_dns_cache(WFHttpTask *server_task,
                             const std::string &url);
 
-	static std::vector<std::string> get_dns_cache_batch(WFHttpTask *server_task,
-									   	const std::vector<std::string> &url_list);
+	static void go_dns_cache(WFHttpTask *server_task,
+                                    const std::vector<std::string> &url_list,
+                                    bool ipv4 = true);
     
     static bool get_dns_cache_batch(WFHttpTask *server_task,
                                     const std::string &url,
