@@ -20,7 +20,6 @@ struct SingleDnsCtx
     
     WFHttpTask *server_task;
     struct addrinfo *addrinfo;
-    unsigned int port;
     bool ipv4;
     bool ipv6;
     json js;
@@ -45,7 +44,6 @@ struct DnsCtx
     int ttl;
     int origin_ttl;                 // todo : 1. how to get origin_ttl
     std::string client_ip;
-    unsigned int port;
     WFHttpTask *server_task;
 };
 

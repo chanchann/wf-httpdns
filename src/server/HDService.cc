@@ -1,7 +1,9 @@
 #include "HDService.h"
 #include "HDFactory.h"
-#include "Util.h"
+#include "HttpUtil.h"
 #include "Context.h"
+
+static const int IP_STR_LEN = 128;
 
 std::string HDService::check_host_field(WFHttpTask *server_task,
                                         std::map<std::string, std::string> &query_split)
@@ -29,41 +31,39 @@ bool HDService::get_dns_cache(WFHttpTask *server_task,
 {   
     spdlog::info("get dns cache url : {}", url);
     auto *sin_ctx = static_cast<SingleDnsCtx *>(server_task->user_data);
-    if(!Util::split_host_port(sin_ctx, url)) {
-        spdlog::error("url is invalid");
-        return false;
-    }
+
     auto *dns_cache = WFGlobal::get_dns_cache();
-    auto *addr_handle = dns_cache->get(sin_ctx->host, sin_ctx->port);
+    auto *addr_handle = dns_cache->get(sin_ctx->host, 0);
     if(addr_handle) 
     {
-        spdlog::info("get cache");
+        spdlog::info("Get cache");
         struct addrinfo *addrinfo = addr_handle->value.addrinfo;
         sin_ctx->ttl = addr_handle->value.expire_time;
-        char ip_str[128];
+        char ip_str[IP_STR_LEN];
         do {
             if(addrinfo->ai_family == AF_INET && sin_ctx->ipv4)
             {
-                inet_ntop(AF_INET, &(((struct sockaddr_in *)addrinfo->ai_addr)->sin_addr), ip_str, 128);
+                inet_ntop(AF_INET, &((reinterpret_cast<struct sockaddr_in *>(addrinfo->ai_addr))->sin_addr), ip_str, IP_STR_LEN);
                 sin_ctx->ips.push_back(ip_str);
             }
             else if(addrinfo->ai_family == AF_INET6 && sin_ctx->ipv6)
             {
-                inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)addrinfo->ai_addr)->sin6_addr), ip_str, 128);
+                inet_ntop(AF_INET6, &((reinterpret_cast<struct sockaddr_in6 *>(addrinfo->ai_addr))->sin6_addr), ip_str, IP_STR_LEN);
                 sin_ctx->ipsv6.push_back(ip_str);
             }
             addrinfo = addrinfo->ai_next;
         } while(addrinfo);
 
         to_json(sin_ctx->js, *sin_ctx);
-        spdlog::info("from cache : {}", sin_ctx->js.dump());
+        spdlog::info("From cache : {}", sin_ctx->js.dump());
+
         server_task->get_resp()->append_output_body(sin_ctx->js.dump());
 
         dns_cache->release(addr_handle);
     }
     else 
     {
-        spdlog::info("no cache");
+        spdlog::info("No cache found ...");
         return false;
     }
     return true;
@@ -75,23 +75,9 @@ static inline void __parallel_callback(const ParallelWork *pwork)
     auto sin_ctx = 
         static_cast<SingleDnsCtx *>(server_task->user_data);
 
-    // put cache
-    auto *dns_cache = WFGlobal::get_dns_cache();
-    const auto *settings = WFGlobal::get_global_settings();
-    unsigned int dns_ttl_default = settings->dns_ttl_default;
-    unsigned int dns_ttl_min = settings->dns_ttl_min;
-    const DnsCache::DnsHandle *addr_handle;
-    addr_handle = dns_cache->put(sin_ctx->host, 
-                                sin_ctx->port, 
-                                sin_ctx->addrinfo,
-                                dns_ttl_default,
-                                dns_ttl_min);
-    dns_cache->release(addr_handle);
-
-    HttpResponse *server_resp = server_task->get_resp();
     to_json(sin_ctx->js, *sin_ctx);
     spdlog::info("res : {}", sin_ctx->js.dump());
-    server_resp->append_output_body(sin_ctx->js.dump());
+    server_task->get_resp()->append_output_body(sin_ctx->js.dump());
     spdlog::info("All series in this parallel have done");
 }
 
@@ -108,7 +94,8 @@ void HDService::single_dns_resolve(WFHttpTask *server_task,
 
     SingleDnsCtx *sin_ctx = new SingleDnsCtx;
     sin_ctx->server_task = server_task;
-    sin_ctx->client_ip = Util::get_peer_addr_str(server_task);
+    sin_ctx->host = host;
+    sin_ctx->client_ip = HttpUtil::get_peer_addr_str(server_task);
 
     server_task->user_data = sin_ctx;
 
@@ -122,14 +109,14 @@ void HDService::single_dns_resolve(WFHttpTask *server_task,
 
     if(sin_ctx->ipv4) 
     {
-        spdlog::trace("add ipv4 series");
+        spdlog::trace("Add ipv4 series");
         auto dns_task_v4 = HDFactory::create_dns_task(host);
         dns_task_v4->user_data = sin_ctx;
         pwork->add_series(Workflow::create_series_work(dns_task_v4, nullptr));
     }
     if(sin_ctx->ipv6)
     {
-        spdlog::trace("add ipv6 series");
+        spdlog::trace("Add ipv6 series");
         auto dns_task_v6 = HDFactory::create_dns_task(host);
         dns_task_v6->get_req()->set_question_type(DNS_TYPE_AAAA);
         dns_task_v6->user_data = sin_ctx;
@@ -137,7 +124,7 @@ void HDService::single_dns_resolve(WFHttpTask *server_task,
     }
     
     server_task->set_callback([](WFHttpTask *server_task) {
-        spdlog::info("server task done");
+        spdlog::info("Server task done ...");
         delete static_cast<SingleDnsCtx *>(server_task->user_data);
     });
 
@@ -184,10 +171,10 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
     }
     if(gather_ctx->ipv6)
     {
-        WFGoTask *cache_v6_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, true);
+        WFGoTask *cache_v6_task = WFTaskFactory::create_go_task("batch", go_dns_cache, server_task, host_list, false);
         WFGraphNode& cache_v6_node = graph->create_graph_node(cache_v6_task);
 
-        WFGoTask *pwork_v6_task = WFTaskFactory::create_go_task("batch", HDFactory::start_dns_paralell, server_task, true);
+        WFGoTask *pwork_v6_task = WFTaskFactory::create_go_task("batch", HDFactory::start_dns_paralell, server_task, false);
         WFGraphNode& pwork_v6_node = graph->create_graph_node(pwork_v6_task);
         cache_v6_node-->pwork_v6_node;
 
@@ -197,37 +184,30 @@ WFGraphTask* HDService::build_task_graph(WFHttpTask *server_task,
 }
 
 bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
-                                    const std::string &url,
+                                    const std::string &host,
                                     bool ipv4)
 {
     DnsCtx *dns_ctx = new DnsCtx;
+    dns_ctx->host = host;
 
-    if(!Util::split_host_port(dns_ctx, url)) 
-    {
-        spdlog::error("url is invalid");
-        delete dns_ctx;
-        return false;
-    }
     auto *dns_cache = WFGlobal::get_dns_cache();
-    
-    spdlog::info("get cache : {} - {}", dns_ctx->host, dns_ctx->port);
-    auto *addr_handle = dns_cache->get(dns_ctx->host, dns_ctx->port);
+    auto *addr_handle = dns_cache->get(host, 0);
     
     if(addr_handle) 
     {
         spdlog::info("Batch get cache");
         struct addrinfo *addrinfo = addr_handle->value.addrinfo;
         dns_ctx->ttl = addr_handle->value.expire_time;
-        char ip_str[128];
+        char ip_str[IP_STR_LEN];
         do {
-            if(addrinfo->ai_family == AF_INET && ipv4)
+            if(ipv4 && addrinfo->ai_family == AF_INET)
             {
-                inet_ntop(AF_INET, &(((struct sockaddr_in *)addrinfo->ai_addr)->sin_addr), ip_str, 128);
+                inet_ntop(AF_INET, &((reinterpret_cast<struct sockaddr_in *>(addrinfo->ai_addr))->sin_addr), ip_str, IP_STR_LEN);
                 dns_ctx->ips.push_back(ip_str);
             }
-            else if(addrinfo->ai_family == AF_INET6 && !ipv4)
+            else if(!ipv4 && addrinfo->ai_family == AF_INET6)
             {
-                inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)addrinfo->ai_addr)->sin6_addr), ip_str, 128);
+                inet_ntop(AF_INET6, &((reinterpret_cast<struct sockaddr_in6 *>(addrinfo->ai_addr))->sin6_addr), ip_str, IP_STR_LEN);
                 dns_ctx->ips.push_back(ip_str);
             }
             addrinfo = addrinfo->ai_next;
@@ -252,7 +232,7 @@ void HDService::go_dns_cache(WFHttpTask *server_task,
                                     const std::vector<std::string> &url_list,
                                     bool ipv4)
 {
-    spdlog::trace("go dns cache");
+    spdlog::trace("Go dns cache");
     std::vector<std::string> not_in_dns_list;
     for(auto &url : url_list)
     {
@@ -277,7 +257,7 @@ void HDService::go_dns_cache(WFHttpTask *server_task,
 void HDService::batch_dns_resolve(WFHttpTask *server_task,
                                   std::map<std::string, std::string> &query_split)
 {
-    spdlog::trace("batch dns request");
+    spdlog::trace("Batch dns request ...");
 
     GatherCtx *gather_ctx = new GatherCtx;
     server_task->user_data = gather_ctx;
@@ -295,7 +275,6 @@ void HDService::batch_dns_resolve(WFHttpTask *server_task,
         spdlog::trace("delete dns_ctx and gather ctx");
         spdlog::info("server task done");
     });
-    // todo : process host name 
 	auto host_list = StringUtil::split(query_split["host"], ',');
 	if (host_list.empty())
 	{
@@ -305,6 +284,7 @@ void HDService::batch_dns_resolve(WFHttpTask *server_task,
 	}
 
     auto *graph = build_task_graph(server_task, host_list);
+    
     **server_task << graph;
 }
 

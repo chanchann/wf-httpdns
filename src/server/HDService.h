@@ -33,7 +33,7 @@ private:
                                     bool ipv4 = true);
     
     static bool get_dns_cache_batch(WFHttpTask *server_task,
-                                    const std::string &url,
+                                    const std::string &host,
                                     bool ipv4 = true);
 
 	static WFGraphTask *build_task_graph(WFHttpTask *server_task,
