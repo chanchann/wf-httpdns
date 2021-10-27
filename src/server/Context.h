@@ -42,7 +42,7 @@ struct DnsCtx
     std::string host;
     std::vector<std::string> ips;
     int ttl;
-    int origin_ttl;                 // todo : 1. how to get origin_ttl
+    int origin_ttl;                 
     std::string client_ip;
     WFHttpTask *server_task;
 };
