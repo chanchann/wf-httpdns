@@ -17,7 +17,7 @@ class HDFactory
 {
 public:
 	static WFDnsTask *
-		create_dns_task(const std::string &url, bool is_batch = false);
+		create_dns_task(const std::string &host, bool is_batch = false);
 
 	static void start_dns_paralell(WFHttpTask *server_task, 
 												bool ipv4 = true);

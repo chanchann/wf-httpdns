@@ -7,7 +7,6 @@
 #include <arpa/inet.h>
 #include <string>
 #include <workflow/WFTaskFactory.h>
-#include <workflow/StringUtil.h>
 
 class HttpUtil
 {

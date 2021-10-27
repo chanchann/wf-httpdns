@@ -4,6 +4,7 @@
 #include "Context.h"
 
 static const int IP_STR_LEN = 128;
+#define GET_CURRENT_SECOND	std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count()
 
 std::string HDService::check_host_field(WFHttpTask *server_task,
                                         std::map<std::string, std::string> &query_split)
@@ -27,9 +28,9 @@ std::string HDService::check_host_field(WFHttpTask *server_task,
 
 
 bool HDService::get_dns_cache(WFHttpTask *server_task,
-                                           const std::string &url) 
+                                           const std::string &host) 
 {   
-    spdlog::info("get dns cache url : {}", url);
+    spdlog::info("get dns cache host : {}", host);
     auto *sin_ctx = static_cast<SingleDnsCtx *>(server_task->user_data);
 
     auto *dns_cache = WFGlobal::get_dns_cache();
@@ -38,9 +39,10 @@ bool HDService::get_dns_cache(WFHttpTask *server_task,
     {
         spdlog::info("Get cache");
         struct addrinfo *addrinfo = addr_handle->value.addrinfo;
-        sin_ctx->ttl = addr_handle->value.expire_time;
+        sin_ctx->ttl = addr_handle->value.expire_time - GET_CURRENT_SECOND;
         char ip_str[IP_STR_LEN];
-        do {
+        while(addrinfo)
+        {
             if(addrinfo->ai_family == AF_INET && sin_ctx->ipv4)
             {
                 inet_ntop(AF_INET, &((reinterpret_cast<struct sockaddr_in *>(addrinfo->ai_addr))->sin_addr), ip_str, IP_STR_LEN);
@@ -52,7 +54,7 @@ bool HDService::get_dns_cache(WFHttpTask *server_task,
                 sin_ctx->ipsv6.push_back(ip_str);
             }
             addrinfo = addrinfo->ai_next;
-        } while(addrinfo);
+        } 
 
         to_json(sin_ctx->js, *sin_ctx);
         spdlog::info("From cache : {}", sin_ctx->js.dump());
@@ -96,7 +98,8 @@ void HDService::single_dns_resolve(WFHttpTask *server_task,
     sin_ctx->server_task = server_task;
     sin_ctx->host = host;
     sin_ctx->client_ip = HttpUtil::get_peer_addr_str(server_task);
-
+    sin_ctx->origin_ttl = WFGlobal::get_global_settings()->dns_ttl_default;
+    sin_ctx->ttl = sin_ctx->origin_ttl;
     server_task->user_data = sin_ctx;
 
     check_query_field(sin_ctx, query_split);
@@ -187,19 +190,22 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
                                     const std::string &host,
                                     bool ipv4)
 {
-    DnsCtx *dns_ctx = new DnsCtx;
-    dns_ctx->host = host;
-
     auto *dns_cache = WFGlobal::get_dns_cache();
     auto *addr_handle = dns_cache->get(host, 0);
     
     if(addr_handle) 
     {
         spdlog::info("Batch get cache");
+        DnsCtx *dns_ctx = new DnsCtx;
+        dns_ctx->host = host;
+        dns_ctx->origin_ttl = WFGlobal::get_global_settings()->dns_ttl_default;
+        
         struct addrinfo *addrinfo = addr_handle->value.addrinfo;
-        dns_ctx->ttl = addr_handle->value.expire_time;
+        dns_ctx->ttl = addr_handle->value.expire_time - GET_CURRENT_SECOND;
+
         char ip_str[IP_STR_LEN];
-        do {
+        while(addrinfo)
+        {
             if(ipv4 && addrinfo->ai_family == AF_INET)
             {
                 inet_ntop(AF_INET, &((reinterpret_cast<struct sockaddr_in *>(addrinfo->ai_addr))->sin_addr), ip_str, IP_STR_LEN);
@@ -211,17 +217,17 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
                 dns_ctx->ips.push_back(ip_str);
             }
             addrinfo = addrinfo->ai_next;
-        } while(addrinfo);
+        }
 
         dns_cache->release(addr_handle);
 
         auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
+        std::lock_guard<std::mutex> lock(gather_ctx->mutex);
         gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);
     }
     else 
     {
         spdlog::info("No cache found ...");
-        delete dns_ctx;
         return false;
     }
     return true;
@@ -229,17 +235,17 @@ bool HDService::get_dns_cache_batch(WFHttpTask *server_task,
 
 
 void HDService::go_dns_cache(WFHttpTask *server_task,
-                                    const std::vector<std::string> &url_list,
+                                    const std::vector<std::string> &host_list,
                                     bool ipv4)
 {
     spdlog::trace("Go dns cache");
     std::vector<std::string> not_in_dns_list;
-    for(auto &url : url_list)
+    for(auto &host : host_list)
     {
         // not find dns record reserve to http req
-        if(!get_dns_cache_batch(server_task, url, ipv4))
+        if(!get_dns_cache_batch(server_task, host, ipv4))
         {
-            not_in_dns_list.push_back(url);
+            not_in_dns_list.push_back(host);
         }
     }
     auto *gather_ctx = static_cast<GatherCtx *>(server_task->user_data);

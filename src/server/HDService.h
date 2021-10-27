@@ -26,10 +26,10 @@ public:
 
 private:
 	static bool get_dns_cache(WFHttpTask *server_task,
-                            const std::string &url);
+                            const std::string &host);
 
 	static void go_dns_cache(WFHttpTask *server_task,
-                                    const std::vector<std::string> &url_list,
+                                    const std::vector<std::string> &host_list,
                                     bool ipv4 = true);
     
     static bool get_dns_cache_batch(WFHttpTask *server_task,
@@ -46,7 +46,6 @@ private:
 								  std::map<std::string, std::string> &query_split);
  
 };
-
 
 template<typename T>
 void HDService::check_query_field(T *ctx,

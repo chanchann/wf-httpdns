@@ -11,6 +11,9 @@ SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string 
 	DnsCtx *dns_ctx = new DnsCtx;
 	dns_ctx->host = host;
 	dns_ctx->server_task = static_cast<WFHttpTask *>(pwork->get_context());
+    dns_ctx->origin_ttl = WFGlobal::get_global_settings()->dns_ttl_default;
+    dns_ctx->ttl = dns_ctx->origin_ttl;
+	dns_ctx->client_ip = HttpUtil::get_peer_addr_str(dns_ctx->server_task);
 
 	WFDnsTask *dns_task = create_dns_task(host, true);
 	dns_task->user_data = dns_ctx;
@@ -103,7 +106,6 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 			{
 				sin_ctx->ipsv6.emplace_back(__ip_bin_to_str(record->rdata, false));
 			}
-			sin_ctx->ttl = record->ttl;
 		}
 
 		__put_cache(dns_task, sin_ctx->host);
@@ -115,28 +117,6 @@ static inline void __dns_callback(WFDnsTask *dns_task)
 	}
 }
 
-
-static inline void __put_cache_batch(WFDnsTask *dns_task, const std::string& host)
-{
-	// put cache
-	struct addrinfo *ai = NULL;
-	int ret = DnsUtil::getaddrinfo(dns_task->get_resp(), 0, &ai);
-	DnsOutput out;
-	DnsRoutine::create(&out, ret, ai);		
-	struct addrinfo *addrinfo = out.move_addrinfo();   // key
-
-	auto *dns_cache = WFGlobal::get_dns_cache();
-	const auto *settings = WFGlobal::get_global_settings();
-	unsigned int dns_ttl_default = settings->dns_ttl_default;
-	unsigned int dns_ttl_min = settings->dns_ttl_min;
-
-	auto *addr_handle = dns_cache->put(host, 
-									0, 
-									addrinfo,
-									dns_ttl_default,
-									dns_ttl_min);
-	dns_cache->release(addr_handle);
-}
 static inline void __dns_callback_batch(WFDnsTask *dns_task)
 {
 	if (dns_task->get_state() == WFT_STATE_SUCCESS)
@@ -159,18 +139,14 @@ static inline void __dns_callback_batch(WFDnsTask *dns_task)
 			{
 				dns_ctx->ips.emplace_back(__ip_bin_to_str(record->rdata, false));
 			}
-			dns_ctx->ttl = record->ttl;
 		}
 		auto server_task = dns_ctx->server_task;
 		auto gather_ctx = static_cast<GatherCtx *>(server_task->user_data);
-		dns_ctx->client_ip = HttpUtil::get_peer_addr_str(server_task);
 
 		__put_cache(dns_task, dns_ctx->host);
 
-		{
-			std::lock_guard<std::mutex> lock(gather_ctx->mutex);
-			gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);
-		}
+		std::lock_guard<std::mutex> lock(gather_ctx->mutex);
+		gather_ctx->dns_ctx_gather_list.push_back(dns_ctx);
 	}
 	else
 	{
@@ -178,18 +154,18 @@ static inline void __dns_callback_batch(WFDnsTask *dns_task)
 	}
 }
 
-WFDnsTask *HDFactory::create_dns_task(const std::string &url, bool is_batch)
+WFDnsTask *HDFactory::create_dns_task(const std::string &host, bool is_batch)
 {
 	spdlog::trace("Create dns task");
 	auto *dns_client = WFGlobal::get_dns_client();
 	WFDnsTask *dns_task;
 	if (is_batch)
 	{
-		dns_task = dns_client->create_dns_task(url, __dns_callback_batch);
+		dns_task = dns_client->create_dns_task(host, __dns_callback_batch);
 	}
 	else
 	{
-		dns_task = dns_client->create_dns_task(url, __dns_callback);
+		dns_task = dns_client->create_dns_task(host, __dns_callback);
 	}
 	return dns_task;
 }

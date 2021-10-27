@@ -22,6 +22,12 @@ void sig_handler(int signo)
 int main()
 {
     signal(SIGINT, sig_handler);
+
+    struct WFGlobalSettings settings = GLOBAL_SETTINGS_DEFAULT;
+    settings.dns_ttl_default = 300;
+    settings.dns_ttl_min = 60;
+    WORKFLOW_library_init(&settings);
+
     spdlog::set_level(spdlog::level::trace);
 
     WFGlobal::get_dns_client()->init("dns://119.29.29.29/");
