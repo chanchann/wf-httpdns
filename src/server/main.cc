@@ -48,13 +48,11 @@ int main()
         {
             HDService::single_dns_resolve(server_task, query_split);
             return;
-        }
-        else if (strcmp(path.c_str(), "/resolve") == 0)
+        } else if (strcmp(path.c_str(), "/resolve") == 0)
         {
             HDService::batch_dns_resolve(server_task, query_split);
             return;
-        }
-        else
+        } else
         {
             server_task->get_resp()->append_output_body_nocopy(R"({"code": "Invalid Query"})", 25);
             return;

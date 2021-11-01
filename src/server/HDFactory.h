@@ -16,15 +16,15 @@ using namespace protocol;
 class HDFactory
 {
 public:
-	static WFDnsTask *
-		create_dns_task(const std::string &host, bool is_batch = false);
+    static WFDnsTask *
+    create_dns_task(const std::string &host, bool is_batch = false);
 
-	static void start_dns_paralell(WFHttpTask *server_task, 
-												bool ipv4 = true);
+    static void start_dns_paralell(WFHttpTask *server_task,
+                                   bool ipv4 = true);
 
 private:
-	static SeriesWork *create_dns_series(ParallelWork *pwork, 
-										const std::string &host);
+    static SeriesWork *create_dns_series(ParallelWork *pwork,
+                                         const std::string &host);
 };
 
 #endif // _HDFACTORY_H_
