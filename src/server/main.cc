@@ -1,12 +1,9 @@
-#include <workflow/Workflow.h>
 #include <workflow/WFTaskFactory.h>
 #include <workflow/WFFacilities.h>
 #include <workflow/WFHttpServer.h>
-#include <workflow/WFDnsClient.h>
 #include <workflow/URIParser.h>
 #include <spdlog/spdlog.h>
-#include <memory>
-#include <signal.h>
+#include <csignal>
 #include <unordered_map>
 #include "HDService.h"
 

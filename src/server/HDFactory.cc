@@ -8,7 +8,7 @@ static const int INET_ADDR_LEN = 128;
 SeriesWork *HDFactory::create_dns_series(ParallelWork *pwork, const std::string &host)
 {
     spdlog::trace("create dns series");
-    DnsCtx *dns_ctx = new DnsCtx;
+    auto *dns_ctx = new DnsCtx;
     dns_ctx->host = host;
     dns_ctx->server_task = static_cast<WFHttpTask *>(pwork->get_context());
     dns_ctx->origin_ttl = WFGlobal::get_global_settings()->dns_ttl_default;
